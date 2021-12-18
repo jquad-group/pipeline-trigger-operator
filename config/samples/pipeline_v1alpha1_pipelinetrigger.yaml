@@ -1,0 +1,9 @@
+apiVersion: pipeline.jquad.rocks/v1alpha1
+kind: PipelineTrigger
+metadata:
+  name: pipelinetrigger-sample
+  namespace: pipeline-trigger-operator-system
+spec:
+  imagePolicy: app1
+  pipeline: build-and-push-base-image
+  # Add fields here

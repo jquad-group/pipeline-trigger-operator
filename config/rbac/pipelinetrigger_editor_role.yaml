@@ -1,0 +1,24 @@
+# permissions for end users to edit pipelinetriggers.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: pipelinetrigger-editor-role
+rules:
+- apiGroups:
+  - pipeline.jquad.rocks
+  resources:
+  - pipelinetriggers
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - pipeline.jquad.rocks
+  resources:
+  - pipelinetriggers/status
+  verbs:
+  - get

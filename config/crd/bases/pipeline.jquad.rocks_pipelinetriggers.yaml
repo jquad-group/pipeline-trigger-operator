@@ -1,0 +1,77 @@
+
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.7.0
+  creationTimestamp: null
+  name: pipelinetriggers.pipeline.jquad.rocks
+spec:
+  group: pipeline.jquad.rocks
+  names:
+    kind: PipelineTrigger
+    listKind: PipelineTriggerList
+    plural: pipelinetriggers
+    singular: pipelinetrigger
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: PipelineTrigger is the Schema for the pipelinetriggers API
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: PipelineTriggerSpec defines the desired state of PipelineTrigger
+            properties:
+              appVersion:
+                description: AppVersion is the version of the application that should
+                  be built
+                type: string
+              imagePolicy:
+                description: ImagePolicy points at the object specifying the latest
+                  image found
+                type: string
+              pipeline:
+                description: Pipeline points at the object specifying the tekton pipeline
+                type: string
+            required:
+            - imagePolicy
+            - pipeline
+            type: object
+          status:
+            description: PipelineTriggerStatus defines the observed state of PipelineTrigger
+            properties:
+              PipelineStatus:
+                description: PipelineStatus gives the status of the tekton pipeline
+                  currently running.
+                type: string
+              latestImage:
+                description: LatestImage gives the first in the list of images scanned
+                  by the image repository, when filtered and ordered according to
+                  the policy.
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []

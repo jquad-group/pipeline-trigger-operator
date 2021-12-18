@@ -1,0 +1,74 @@
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  creationTimestamp: null
+  name: manager-role
+rules:
+- apiGroups:
+  - image.toolkit.fluxcd.io
+  resources:
+  - imagepolicies
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - image.toolkit.fluxcd.io
+  resources:
+  - imagepolicies/status
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - pipeline.jquad.rocks
+  resources:
+  - pipelinetriggers
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - pipeline.jquad.rocks
+  resources:
+  - pipelinetriggers/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - pipeline.jquad.rocks
+  resources:
+  - pipelinetriggers/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - tekton.dev
+  resources:
+  - pipelineruns
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - tekton.dev
+  resources:
+  - pipelines
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch

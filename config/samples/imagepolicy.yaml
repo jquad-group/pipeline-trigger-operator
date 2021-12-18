@@ -1,0 +1,101 @@
+apiVersion: image.toolkit.fluxcd.io/v1beta1
+kind: ImagePolicy
+metadata:
+  name: app1
+  namespace: pipeline-trigger-operator-system
+spec:
+  imageRepositoryRef:
+    name: app1
+    namespace: pipeline-trigger-operator-system
+  policy:
+    semver:
+      range: 0.0.x
+---
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: build-and-push-base-image
+  namespace: pipeline-trigger-operator-system
+spec:
+  workspaces:
+    - name: workspace
+  params:
+    - name: repo-url
+      type: string
+    - name: repo-url-alternate
+      type: string
+      description: The git repository URL to clone from.
+      default: ""
+    - name: branch-name
+      type: string
+      description: The git branch to clone.
+    - name: projectname
+      type: string
+      description: the git project name
+    - name: repositoryName
+      type: string
+      description: the name of the image
+    - name: imageTag
+      description: the tag of the image
+      type: string
+    - name: commit
+      type: string
+      description: latest commit id
+    - name: imageLocation
+      description: Location where the resulting docker image will be pushed to
+      type: string
+    - name: pathToDockerFile
+      description: The path to the build context, used by Kaniko - within the workspace
+      type: string
+    - name: pathToContext
+      type: string
+      description: The build context used by Kaniko
+    - name: subdirectory
+      type: string
+      description: subdirectory
+      default: ""
+  tasks:
+    - name: clone
+      taskRef:
+        name: git-clone
+        kind: Task
+      workspaces:
+        - name: repo
+          workspace: workspace
+      params:
+        - name: url
+          value: $(params.repo-url)
+        - name: url-alternate
+          value: $(params.repo-url-alternate)
+        - name: revision
+          value: $(params.branch-name)
+        - name: refspec
+          value: "+refs/tags/*:refs/tags/* +refs/heads/*:refs/heads/*"
+        - name: deleteExisting
+          value: "true"
+        - name: sslVerify
+          value: "false"
+        - name: depth
+          value: "1"
+        - name: subdirectory
+          value: "$(params.subdirectory)"
+    - name: assemble-and-push
+      taskRef:
+        name: assemble-and-push-task-ws
+        kind: Task
+      workspaces:
+        - name: repo
+          workspace: workspace
+      runAfter:
+        - clone
+      params:
+        - name: imageLocation
+          value: "$(params.imageLocation)"
+        - name: repositoryName
+          value: "$(params.repositoryName)"
+        - name: imageTag
+          value: "$(params.imageTag)"
+        - name: pathToDockerFile
+          value: "$(params.pathToDockerFile)"
+        - name: pathToContext
+          value: "$(params.pathToContext)"

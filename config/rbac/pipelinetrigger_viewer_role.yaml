@@ -1,0 +1,20 @@
+# permissions for end users to view pipelinetriggers.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: pipelinetrigger-viewer-role
+rules:
+- apiGroups:
+  - pipeline.jquad.rocks
+  resources:
+  - pipelinetriggers
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - pipeline.jquad.rocks
+  resources:
+  - pipelinetriggers/status
+  verbs:
+  - get
