@@ -20,6 +20,7 @@ import (
 	"context"
 
 	"github.com/go-logr/logr"
+	"k8s.io/apimachinery/pkg/api/resource"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -34,8 +35,11 @@ import (
 
 	pipelinev1alpha1 "github.com/jquad-group/pipeline-trigger-operator/api/v1alpha1"
 	meta "github.com/jquad-group/pipeline-trigger-operator/pkg/meta"
+
 	tektondevv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
 	clientsetversioned "github.com/tektoncd/pipeline/pkg/client/clientset/versioned"
+
+	corev1 "k8s.io/api/core/v1"
 )
 
 const (
@@ -134,10 +138,41 @@ func (r *PipelineTriggerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		pipelineRunTypeMeta := meta.TypeMeta("PipelineRun", "tekton.dev/v1beta1")
 		pr := &tektondevv1.PipelineRun{
 			TypeMeta:   pipelineRunTypeMeta,
-			ObjectMeta: meta.ObjectMeta(meta.NamespacedName("", "ci-dryrun-from-push-pipeline-$(uid)")),
+			ObjectMeta: meta.ObjectMeta(meta.NamespacedName(pipelineTrigger.Namespace, "ci-dryrun-from-push-pipeline")),
 			Spec: tektondevv1.PipelineRunSpec{
-				ServiceAccountName: "default",
-				PipelineRef:        createPipelineRef("build-and-push-base-image"),
+				//ServiceAccountName: "default",
+				PipelineRef: createPipelineRef("build-and-push-base-image"),
+				Params: []tektondevv1.Param{
+					createTaskParam("repo-url", "git@github.com:jquad-group/www-jquad.git"),
+					createTaskParam("branch-name", "main"),
+					createTaskParam("projectname", "www-jquad"),
+					createTaskParam("repositoryName", "www-jquad"),
+					createTaskParam("imageTag", "0.0.5"),
+					createTaskParam("commit", ""),
+					createTaskParam("imageLocation", "harbor.jquad.rocks/library"),
+					createTaskParam("pathToDockerFile", "/workspace/repo"),
+					createTaskParam("pathToContext", "/workspace/repo/Dockerfile"),
+				},
+				Workspaces: []tektondevv1.WorkspaceBinding{
+					createWorkspaceBinding("workspace", "ReadWriteOnce", "1Gi"),
+				},
+				/*
+					Workspaces: []tektondevv1.WorkspaceBinding{
+						{Name: "workspace"},
+						{VolumeClaimTemplate: &corev1.PersistentVolumeClaim{
+							Spec: corev1.PersistentVolumeClaimSpec{
+								AccessModes: []corev1.PersistentVolumeAccessMode{
+									corev1.PersistentVolumeAccessMode("ReadWriteOnce"),
+								},
+								Resources: corev1.ResourceRequirements{
+									Requests: corev1.ResourceList{
+										corev1.ResourceName("storage"): resource.MustParse("1Gi"),
+									},
+								},
+							},
+						}},
+					},
+				*/
 			},
 		}
 
@@ -243,10 +278,44 @@ func getPipelineNames(pipelines []tektondevv1.Pipeline) []string {
 	return pipelineNames
 }
 
+// Workspace adds a WorkspaceBinding to the PipelineRun spec.
+func createWorkspaceBinding(name string, accessMode string, size string) tektondevv1.WorkspaceBinding {
+	return tektondevv1.WorkspaceBinding{
+		Name: name,
+		VolumeClaimTemplate: &corev1.PersistentVolumeClaim{
+			Spec: corev1.PersistentVolumeClaimSpec{
+				AccessModes: []corev1.PersistentVolumeAccessMode{
+					corev1.PersistentVolumeAccessMode(accessMode)},
+				Resources: corev1.ResourceRequirements{
+					Requests: corev1.ResourceList{
+						"storage": resource.MustParse(size),
+					},
+				},
+			},
+		},
+	}
+
+}
+
+func createTaskParam(name, value string) tektondevv1.Param {
+	return tektondevv1.Param{
+		Name: name,
+
+		Value: tektondevv1.ArrayOrString{
+			Type:      tektondevv1.ParamTypeString,
+			StringVal: value,
+		},
+	}
+}
+
 func createPipelineRef(name string) *tektondevv1.PipelineRef {
 	return &tektondevv1.PipelineRef{
 		Name: name,
 	}
+}
+
+func createParamSpec(name string, paramType tektondevv1.ParamType) tektondevv1.ParamSpec {
+	return tektondevv1.ParamSpec{Name: name, Type: paramType}
 }
 
 /*

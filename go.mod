@@ -10,6 +10,7 @@ require (
 	github.com/onsi/ginkgo v1.16.4
 	github.com/onsi/gomega v1.15.0
 	github.com/tektoncd/pipeline v0.31.0
+	k8s.io/api v0.21.4 // indirect
 	k8s.io/apimachinery v0.21.4
 	k8s.io/client-go v0.21.4
 	k8s.io/utils v0.0.0-20210819203725-bdf08cb9a70a // indirect
