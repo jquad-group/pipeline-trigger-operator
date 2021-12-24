@@ -12,6 +12,34 @@ spec:
       range: 0.0.x
 ---
 apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: clone
+  namespace: pipeline-trigger-operator-system
+spec:
+  steps:
+    - name: clone
+      image: ubuntu
+      command:
+        - echo
+      args:
+        - "clone"
+---
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: assemble-and-push
+  namespace: pipeline-trigger-operator-system
+spec:
+  steps:
+    - name: assemble-and-push
+      image: ubuntu
+      command:
+        - echo
+      args:
+        - "assemble-and-push"        
+---
+apiVersion: tekton.dev/v1beta1
 kind: Pipeline
 metadata:
   name: build-and-push-base-image
@@ -57,45 +85,11 @@ spec:
   tasks:
     - name: clone
       taskRef:
-        name: git-clone
+        name: clone
         kind: Task
-      workspaces:
-        - name: repo
-          workspace: workspace
-      params:
-        - name: url
-          value: $(params.repo-url)
-        - name: url-alternate
-          value: $(params.repo-url-alternate)
-        - name: revision
-          value: $(params.branch-name)
-        - name: refspec
-          value: "+refs/tags/*:refs/tags/* +refs/heads/*:refs/heads/*"
-        - name: deleteExisting
-          value: "true"
-        - name: sslVerify
-          value: "false"
-        - name: depth
-          value: "1"
-        - name: subdirectory
-          value: "$(params.subdirectory)"
     - name: assemble-and-push
       taskRef:
-        name: assemble-and-push-task-ws
+        name: assemble-and-push
         kind: Task
-      workspaces:
-        - name: repo
-          workspace: workspace
       runAfter:
         - clone
-      params:
-        - name: imageLocation
-          value: "$(params.imageLocation)"
-        - name: repositoryName
-          value: "$(params.repositoryName)"
-        - name: imageTag
-          value: "$(params.imageTag)"
-        - name: pathToDockerFile
-          value: "$(params.pathToDockerFile)"
-        - name: pathToContext
-          value: "$(params.pathToContext)"

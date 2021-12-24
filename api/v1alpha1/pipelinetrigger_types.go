@@ -20,14 +20,22 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
+//+kubebuilder:object:root=true
+//+kubebuilder:subresource:status
+
+// PipelineTrigger is the Schema for the pipelinetriggers API
+type PipelineTrigger struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+
+	Spec PipelineTriggerSpec `json:"spec,omitempty"`
+
+	// +kubebuilder:default={"observedGeneration":-1}
+	Status PipelineTriggerStatus `json:"status,omitempty"`
+}
 
 // PipelineTriggerSpec defines the desired state of PipelineTrigger
 type PipelineTriggerSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
 	// AppVersion is the version of the application
 	// that should be built
 	AppVersion string `json:"appVersion,omitempty"`
@@ -39,7 +47,7 @@ type PipelineTriggerSpec struct {
 
 	// Pipeline points at the object specifying the tekton pipeline
 	// +required
-	Pipeline string `json:"pipeline"`
+	Pipeline Pipeline `json:"pipeline"`
 }
 
 // PipelineTriggerStatus defines the observed state of PipelineTrigger
@@ -52,20 +60,13 @@ type PipelineTriggerStatus struct {
 
 	// PipelineStatus gives the status of the
 	// tekton pipeline currently running.
-	PipelineStatus string `json:"PipelineStatus,omitempty"`
+	PipelineStatus string `json:"pipelineStatus,omitempty"`
 	// +optional
-}
 
-//+kubebuilder:object:root=true
-//+kubebuilder:subresource:status
-
-// PipelineTrigger is the Schema for the pipelinetriggers API
-type PipelineTrigger struct {
-	metav1.TypeMeta   `json:",inline"`
-	metav1.ObjectMeta `json:"metadata,omitempty"`
-
-	Spec   PipelineTriggerSpec   `json:"spec,omitempty"`
-	Status PipelineTriggerStatus `json:"status,omitempty"`
+	// PipelineReason gives the reason of the
+	// tekton pipeline currently running.
+	PipelineReason string `json:"pipelineReason,omitempty"`
+	// +optional
 }
 
 //+kubebuilder:object:root=true

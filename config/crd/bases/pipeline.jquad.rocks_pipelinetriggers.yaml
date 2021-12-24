@@ -46,7 +46,38 @@ spec:
                 type: string
               pipeline:
                 description: Pipeline points at the object specifying the tekton pipeline
-                type: string
+                properties:
+                  inputParams:
+                    items:
+                      properties:
+                        name:
+                          type: string
+                        value:
+                          type: string
+                      required:
+                      - name
+                      - value
+                      type: object
+                    type: array
+                  name:
+                    type: string
+                  status:
+                    properties:
+                      PipelineStatus:
+                        description: PipelineStatus gives the status of the tekton
+                          pipeline currently running.
+                        type: string
+                    type: object
+                  workspace:
+                    properties:
+                      accessMode:
+                        type: string
+                      name:
+                        type: string
+                      size:
+                        type: string
+                    type: object
+                type: object
             required:
             - imagePolicy
             - pipeline
@@ -54,14 +85,18 @@ spec:
           status:
             description: PipelineTriggerStatus defines the observed state of PipelineTrigger
             properties:
-              PipelineStatus:
-                description: PipelineStatus gives the status of the tekton pipeline
-                  currently running.
-                type: string
               latestImage:
                 description: LatestImage gives the first in the list of images scanned
                   by the image repository, when filtered and ordered according to
                   the policy.
+                type: string
+              pipelineReason:
+                description: PipelineReason gives the reason of the tekton pipeline
+                  currently running.
+                type: string
+              pipelineStatus:
+                description: PipelineStatus gives the status of the tekton pipeline
+                  currently running.
                 type: string
             type: object
         type: object
