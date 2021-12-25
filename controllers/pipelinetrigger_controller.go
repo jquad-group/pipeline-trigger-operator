@@ -157,10 +157,11 @@ func (r *PipelineTriggerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	}
 
 	foundPipelineRun := &tektondevv1.PipelineRun{}
-	err = r.Get(ctx, types.NamespacedName{Name: pipelineTrigger.Name, Namespace: pipelineTrigger.Namespace}, foundPipelineRun)
-	if err != nil {
-		pipelineTrigger.Status.PipelineStatus = "PipelineRun not found."
-		return ctrl.Result{}, err
+	if err := r.Get(ctx, types.NamespacedName{Name: pipelineTrigger.Name, Namespace: pipelineTrigger.Namespace}, foundPipelineRun); err != nil {
+		// we'll ignore not-found errors, since they can't be fixed by an immediate
+		// requeue (we'll need to wait for a new notification), and we can get them
+		// on deleted requests.
+		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
 	if len(foundPipelineRun.Status.Conditions) > 0 {
@@ -174,21 +175,42 @@ func (r *PipelineTriggerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 				return ctrl.Result{}, ptErrStatus
 			}
 			return ctrl.Result{Requeue: true}, nil
-		} else if pipelineTrigger.Status.PipelineStatus == "Succeeded" {
-			err := r.Delete(ctx, foundPipelineRun)
-			if err != nil {
-				log.Error(err, "Failed to delete PipelineRun")
+		} else if pipelineTrigger.Status.PipelineStatus == "Succeeded" || pipelineTrigger.Status.PipelineStatus == "Completed" {
+
+			if err := r.Delete(ctx, foundPipelineRun); err != nil {
+				// if fail to delete the external dependency here, return with error
+				// so that it can be retried
 				return ctrl.Result{}, err
 			}
+
+			// remove our finalizer from the list and update it.
+			controllerutil.RemoveFinalizer(&pipelineTrigger, myFinalizerName)
+			pipelineTrigger.Status.PipelineStatus = "Succeeded and Removed"
+			r.Status().Update(ctx, &pipelineTrigger)
 			msg := "PipelineRun " + foundPipelineRun.Name + " in namespace " + foundPipelineRun.Namespace + " deleted. "
 			r.recorder.Event(&pipelineTrigger, core.EventTypeNormal, "Info", msg)
-			pipelineTrigger.Status.PipelineStatus = "Succeeded and Removed"
-			ptErrStatus := r.Status().Update(ctx, &pipelineTrigger)
-			if ptErrStatus != nil {
-				log.Error(ptErrStatus, "Failed to update PipelineTrigger status")
-				return ctrl.Result{}, ptErrStatus
+			if err := r.Update(ctx, &pipelineTrigger); err != nil {
+				return ctrl.Result{}, err
 			}
-			return ctrl.Result{}, err
+			return ctrl.Result{}, nil
+
+			/*
+				err := r.Delete(ctx, foundPipelineRun)
+				if err != nil {
+					log.Error(err, "Failed to delete PipelineRun")
+					return ctrl.Result{}, err
+				}
+
+				msg := "PipelineRun " + foundPipelineRun.Name + " in namespace " + foundPipelineRun.Namespace + " deleted. "
+				r.recorder.Event(&pipelineTrigger, core.EventTypeNormal, "Info", msg)
+				pipelineTrigger.Status.PipelineStatus = "Succeeded and Removed"
+				ptErrStatus := r.Status().Update(ctx, &pipelineTrigger)
+				if ptErrStatus != nil {
+					log.Error(ptErrStatus, "Failed to update PipelineTrigger status")
+					return ctrl.Result{}, ptErrStatus
+				}
+				return ctrl.Result{}, err
+			*/
 		}
 	}
 
