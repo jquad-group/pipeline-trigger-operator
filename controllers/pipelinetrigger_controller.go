@@ -30,6 +30,7 @@ import (
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -175,40 +176,37 @@ func (r *PipelineTriggerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		}
 	}
 
-	/*
-
-		// examine DeletionTimestamp to determine if object is under deletion
-		if pipelineTrigger.ObjectMeta.DeletionTimestamp.IsZero() {
-			// The object is not being deleted, so if it does not have our finalizer,
-			// then lets add the finalizer and update the object. This is equivalent
-			// registering our finalizer.
-			if !containsString(pipelineTrigger.GetFinalizers(), myFinalizerName) {
-				controllerutil.AddFinalizer(&pipelineTrigger, myFinalizerName)
-				if err := r.Update(ctx, &pipelineTrigger); err != nil {
-					return ctrl.Result{}, err
-				}
+	// examine DeletionTimestamp to determine if object is under deletion
+	if pipelineTrigger.ObjectMeta.DeletionTimestamp.IsZero() {
+		// The object is not being deleted, so if it does not have our finalizer,
+		// then lets add the finalizer and update the object. This is equivalent
+		// registering our finalizer.
+		if !containsString(pipelineTrigger.GetFinalizers(), myFinalizerName) {
+			controllerutil.AddFinalizer(&pipelineTrigger, myFinalizerName)
+			if err := r.Update(ctx, &pipelineTrigger); err != nil {
+				return ctrl.Result{}, err
 			}
-		} else {
-			// The object is being deleted
-			if containsString(pipelineTrigger.GetFinalizers(), myFinalizerName) {
-				// our finalizer is present, so lets handle any external dependency
-				if err := r.Delete(ctx, pipelineRun); err != nil {
-					// if fail to delete the external dependency here, return with error
-					// so that it can be retried
-					return ctrl.Result{}, err
-				}
-
-				// remove our finalizer from the list and update it.
-				controllerutil.RemoveFinalizer(&pipelineTrigger, myFinalizerName)
-				if err := r.Update(ctx, &pipelineTrigger); err != nil {
-					return ctrl.Result{}, err
-				}
-			}
-
-			// Stop reconciliation as the item is being deleted
-			return ctrl.Result{}, nil
 		}
-	*/
+	} else {
+		// The object is being deleted
+		if containsString(pipelineTrigger.GetFinalizers(), myFinalizerName) {
+			// our finalizer is present, so lets handle any external dependency
+			if err := r.Delete(ctx, foundPipelineRun); err != nil {
+				// if fail to delete the external dependency here, return with error
+				// so that it can be retried
+				return ctrl.Result{}, err
+			}
+
+			// remove our finalizer from the list and update it.
+			controllerutil.RemoveFinalizer(&pipelineTrigger, myFinalizerName)
+			if err := r.Update(ctx, &pipelineTrigger); err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+
+		// Stop reconciliation as the item is being deleted
+		return ctrl.Result{}, nil
+	}
 
 	return ctrl.Result{}, nil
 
