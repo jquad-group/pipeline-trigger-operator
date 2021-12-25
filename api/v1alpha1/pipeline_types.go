@@ -55,10 +55,10 @@ func (pipeline Pipeline) CreatePipelineRun(ctx context.Context, req ctrl.Request
 	}
 
 	pipelineRunTypeMeta := meta.TypeMeta("PipelineRun", "tekton.dev/v1beta1")
-	pipelineRunName := pipelineTrigger.Name + "-" + generateRandomString(4, "abcdefghijklmnopqrstuvwxyz")
+	//pipelineRunName := pipelineTrigger.Name + "-" + generateRandomString(4, "abcdefghijklmnopqrstuvwxyz")
 	pr := &tektondevv1.PipelineRun{
 		TypeMeta:   pipelineRunTypeMeta,
-		ObjectMeta: meta.ObjectMeta(meta.NamespacedName(pipelineTrigger.Namespace, pipelineRunName)),
+		ObjectMeta: meta.ObjectMeta(meta.NamespacedName(pipelineTrigger.Namespace, pipelineTrigger.Name)),
 		Spec: tektondevv1.PipelineRunSpec{
 			ServiceAccountName: pipeline.SericeAccountName,
 			PipelineRef:        pipeline.CreatePipelineRef(),

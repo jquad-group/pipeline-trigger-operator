@@ -23,13 +23,13 @@ import (
 	core "k8s.io/api/core/v1"
 
 	"github.com/go-logr/logr"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -100,114 +100,115 @@ func (r *PipelineTriggerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		// requeue (we'll need to wait for a new notification), and we can get them
 		// on deleted requests.
 		return ctrl.Result{}, client.IgnoreNotFound(err)
-	} else {
+	}
 
-		//var imagePolicyVersion string
-		if pipelineTrigger.Spec.ImagePolicy != "" {
-			ImagePolicy := pipelineTrigger.Spec.ImagePolicy
-			foundImagePolicy := &imagereflectorv1.ImagePolicy{}
-			err := r.Get(ctx, types.NamespacedName{Name: ImagePolicy, Namespace: pipelineTrigger.Namespace}, foundImagePolicy)
-			if err != nil {
-				// If a imagePolicy name is provided, then it must exist
-				// Create an Event for the user to understand why their reconcile is failing.
-				errorMsg := "Image Policy " + pipelineTrigger.Spec.ImagePolicy + " in namespace " + pipelineTrigger.Namespace + "cannot be found."
-				r.recorder.Event(&pipelineTrigger, core.EventTypeWarning, "Error", errorMsg)
+	ImagePolicy := pipelineTrigger.Spec.ImagePolicy
+	foundImagePolicy := &imagereflectorv1.ImagePolicy{}
+	err := r.Get(ctx, types.NamespacedName{Name: ImagePolicy, Namespace: pipelineTrigger.Namespace}, foundImagePolicy)
+	if err != nil {
+		// If a imagePolicy name is provided, then it must exist
+		// Create an Event for the user to understand why their reconcile is failing.
+		errorMsg := "Image Policy " + pipelineTrigger.Spec.ImagePolicy + " in namespace " + pipelineTrigger.Namespace + "cannot be found."
+		r.recorder.Event(&pipelineTrigger, core.EventTypeWarning, "Error", errorMsg)
+		return ctrl.Result{}, err
+
+	}
+
+	if pipelineTrigger.Status.LatestImage != foundImagePolicy.Status.LatestImage {
+		pipelineTrigger.Status.LatestImage = foundImagePolicy.Status.LatestImage
+		newVersionMsg := "Image Policy " + pipelineTrigger.Spec.ImagePolicy + " in namespace " + pipelineTrigger.Namespace + " got new version " + foundImagePolicy.Status.LatestImage
+		r.recorder.Event(&pipelineTrigger, core.EventTypeNormal, "Info", newVersionMsg)
+		ptErr := r.Status().Update(ctx, &pipelineTrigger)
+		if ptErr != nil {
+			log.Error(ptErr, "Failed to update PipelineTrigger status")
+			return ctrl.Result{}, ptErr
+		}
+
+		Pipeline := pipelineTrigger.Spec.Pipeline
+		foundTektonPipeline := &tektondevv1.Pipeline{}
+		err := r.Get(ctx, types.NamespacedName{Name: Pipeline.Name, Namespace: pipelineTrigger.Namespace}, foundTektonPipeline)
+		if err != nil {
+			// If a pipeline name is provided, then it must exist
+			// You will likely want to create an Event for the user to understand why their reconcile is failing.
+			errorMsg := "Pipeline " + pipelineTrigger.Spec.Pipeline.Name + " in namespace " + pipelineTrigger.Namespace + " cannot be found."
+			r.recorder.Event(&pipelineTrigger, core.EventTypeWarning, "Error", errorMsg)
+			return ctrl.Result{}, err
+		}
+
+		// check if a pipelinerun already exists, if not create a new one
+		foundPipelineRun := &tektondevv1.PipelineRun{}
+		err = r.Get(ctx, types.NamespacedName{Name: pipelineTrigger.Name, Namespace: pipelineTrigger.Namespace}, foundPipelineRun)
+		if err != nil && errors.IsNotFound(err) {
+			pr, pipelineRunError := Pipeline.CreatePipelineRun(ctx, req, pipelineTrigger)
+			if pipelineRunError != nil {
+				log.Error(err, "Failed to create new PipelineRun", "PipelineTrigger.Namespace", pipelineTrigger.Namespace, "PipelineTrigger.Name", pipelineTrigger.Name)
 				return ctrl.Result{}, err
-
-			} else {
-				var pipelineRun *tektondevv1.PipelineRun
-				if pipelineTrigger.Status.LatestImage != foundImagePolicy.Status.LatestImage {
-					pipelineTrigger.Status.LatestImage = foundImagePolicy.Status.LatestImage
-					msg := "Image Policy " + pipelineTrigger.Spec.ImagePolicy + " in namespace " + pipelineTrigger.Namespace + " got new version " + foundImagePolicy.Status.LatestImage
-					r.recorder.Event(&pipelineTrigger, core.EventTypeNormal, "Info", msg)
-					ptErr := r.Status().Update(ctx, &pipelineTrigger)
-					if ptErr != nil {
-						log.Error(ptErr, "Failed to update PipelineTrigger status")
-						return ctrl.Result{}, ptErr
-					}
-
-					if pipelineTrigger.Spec.Pipeline.Name != "" {
-						Pipeline := pipelineTrigger.Spec.Pipeline
-						foundTektonPipeline := &tektondevv1.Pipeline{}
-						err := r.Get(ctx, types.NamespacedName{Name: Pipeline.Name, Namespace: pipelineTrigger.Namespace}, foundTektonPipeline)
-						if err != nil {
-							// If a pipeline name is provided, then it must exist
-							// You will likely want to create an Event for the user to understand why their reconcile is failing.
-							errorMsg := "Pipeline " + pipelineTrigger.Spec.Pipeline.Name + " in namespace " + pipelineTrigger.Namespace + " cannot be found."
-							r.recorder.Event(&pipelineTrigger, core.EventTypeWarning, "Error", errorMsg)
-							return ctrl.Result{}, err
-						}
-
-						pr, err := Pipeline.CreatePipelineRun(ctx, req, pipelineTrigger)
-						pipelineRun = pr
-						msg := "PipelineRun " + pr.Name + " in namespace " + pr.Namespace + " created. "
-						r.recorder.Event(&pipelineTrigger, core.EventTypeNormal, "Info", msg)
-
-					}
-
-				}
-
-				foundTektonPipelineRun := &tektondevv1.PipelineRun{}
-				prErr := r.Get(ctx, types.NamespacedName{Name: pipelineRun.Name, Namespace: pipelineRun.Namespace}, foundTektonPipelineRun)
-				if prErr != nil {
-					errorMsg := "PipelineRun " + pipelineRun.Name + " in namespace " + pipelineRun.Namespace + " cannot be found."
-					r.recorder.Event(&pipelineTrigger, core.EventTypeWarning, "Error", errorMsg)
-					return ctrl.Result{}, err
-				} else {
-					if foundTektonPipelineRun.Status.Conditions[0].Reason == tektondevv1.PipelineRunReasonFailed.String() {
-						pipelineTrigger.Status.PipelineStatus = "Failed"
-						msg := "PipelineRun " + pipelineRun.Name + " in namespace " + pipelineRun.Namespace + " has failed. See the logs for more information."
-						r.recorder.Event(&pipelineTrigger, core.EventTypeWarning, "Error", msg)
-					} else {
-						pipelineTrigger.Status.PipelineStatus = foundTektonPipelineRun.Status.Conditions[0].Reason
-						msg := "PipelineRun " + pipelineRun.Name + " in namespace " + pipelineRun.Namespace + " is with status: " + foundTektonPipelineRun.Status.Conditions[0].Reason
-						r.recorder.Event(&pipelineTrigger, core.EventTypeNormal, "Info", msg)
-					}
-
-					ptErr := r.Status().Update(ctx, &pipelineTrigger)
-					if ptErr != nil {
-						log.Error(ptErr, "Failed to update PipelineTrigger status")
-						return ctrl.Result{}, ptErr
-					}
-				}
-
-				// examine DeletionTimestamp to determine if object is under deletion
-				if pipelineTrigger.ObjectMeta.DeletionTimestamp.IsZero() {
-					// The object is not being deleted, so if it does not have our finalizer,
-					// then lets add the finalizer and update the object. This is equivalent
-					// registering our finalizer.
-					if !containsString(pipelineTrigger.GetFinalizers(), myFinalizerName) {
-						controllerutil.AddFinalizer(&pipelineTrigger, myFinalizerName)
-						if err := r.Update(ctx, &pipelineTrigger); err != nil {
-							return ctrl.Result{}, err
-						}
-					}
-				} else {
-					// The object is being deleted
-					if containsString(pipelineTrigger.GetFinalizers(), myFinalizerName) {
-						// our finalizer is present, so lets handle any external dependency
-						if err := r.Delete(ctx, pipelineRun); err != nil {
-							// if fail to delete the external dependency here, return with error
-							// so that it can be retried
-							return ctrl.Result{}, err
-						}
-
-						// remove our finalizer from the list and update it.
-						controllerutil.RemoveFinalizer(&pipelineTrigger, myFinalizerName)
-						if err := r.Update(ctx, &pipelineTrigger); err != nil {
-							return ctrl.Result{}, err
-						}
-					}
-
-					// Stop reconciliation as the item is being deleted
-					return ctrl.Result{}, nil
-				}
-
 			}
-
+			newPipelineRunMsg := "PipelineRun " + pr.Name + " in namespace " + pr.Namespace + " created. "
+			r.recorder.Event(&pipelineTrigger, core.EventTypeNormal, "Info", newPipelineRunMsg)
+			return ctrl.Result{Requeue: true}, nil
+		} else if err != nil {
+			log.Error(err, "Failed to get PipelineRun")
+			return ctrl.Result{}, err
 		}
 
 	}
+
+	foundPipelineRun := &tektondevv1.PipelineRun{}
+	err = r.Get(ctx, types.NamespacedName{Name: pipelineTrigger.Name, Namespace: pipelineTrigger.Namespace}, foundPipelineRun)
+	if err != nil {
+		pipelineTrigger.Status.PipelineStatus = "PipelineRun not found."
+		return ctrl.Result{}, err
+	}
+
+	if len(foundPipelineRun.Status.Conditions) > 0 {
+		if pipelineTrigger.Status.PipelineStatus != foundPipelineRun.Status.Conditions[0].Reason {
+			pipelineTrigger.Status.PipelineStatus = foundPipelineRun.Status.Conditions[0].Reason
+			msg := "PipelineRun " + foundPipelineRun.Name + " in namespace " + foundPipelineRun.Namespace + " is with status: " + foundPipelineRun.Status.Conditions[0].Reason
+			r.recorder.Event(&pipelineTrigger, core.EventTypeNormal, "Info", msg)
+			ptErrStatus := r.Status().Update(ctx, &pipelineTrigger)
+			if ptErrStatus != nil {
+				log.Error(ptErrStatus, "Failed to update PipelineTrigger status")
+				return ctrl.Result{}, ptErrStatus
+			}
+			return ctrl.Result{Requeue: true}, nil
+		}
+	}
+
+	/*
+
+		// examine DeletionTimestamp to determine if object is under deletion
+		if pipelineTrigger.ObjectMeta.DeletionTimestamp.IsZero() {
+			// The object is not being deleted, so if it does not have our finalizer,
+			// then lets add the finalizer and update the object. This is equivalent
+			// registering our finalizer.
+			if !containsString(pipelineTrigger.GetFinalizers(), myFinalizerName) {
+				controllerutil.AddFinalizer(&pipelineTrigger, myFinalizerName)
+				if err := r.Update(ctx, &pipelineTrigger); err != nil {
+					return ctrl.Result{}, err
+				}
+			}
+		} else {
+			// The object is being deleted
+			if containsString(pipelineTrigger.GetFinalizers(), myFinalizerName) {
+				// our finalizer is present, so lets handle any external dependency
+				if err := r.Delete(ctx, pipelineRun); err != nil {
+					// if fail to delete the external dependency here, return with error
+					// so that it can be retried
+					return ctrl.Result{}, err
+				}
+
+				// remove our finalizer from the list and update it.
+				controllerutil.RemoveFinalizer(&pipelineTrigger, myFinalizerName)
+				if err := r.Update(ctx, &pipelineTrigger); err != nil {
+					return ctrl.Result{}, err
+				}
+			}
+
+			// Stop reconciliation as the item is being deleted
+			return ctrl.Result{}, nil
+		}
+	*/
 
 	return ctrl.Result{}, nil
 
@@ -351,4 +352,10 @@ func containsString(slice []string, s string) bool {
 		}
 	}
 	return false
+}
+
+// labelsForPipelineRun returns the labels for selecting the resources
+// belonging to the given PipelineTrigger CR name.
+func labelsForPipelineRun(name string) map[string]string {
+	return map[string]string{"owner_by": "pipeline-trigger-operator", "belongs_to": name}
 }
