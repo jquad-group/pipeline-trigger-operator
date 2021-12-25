@@ -61,13 +61,8 @@ spec:
                     type: array
                   name:
                     type: string
-                  status:
-                    properties:
-                      PipelineStatus:
-                        description: PipelineStatus gives the status of the tekton
-                          pipeline currently running.
-                        type: string
-                    type: object
+                  serviceAccountName:
+                    type: string
                   workspace:
                     properties:
                       accessMode:

@@ -23,7 +23,6 @@ import (
 	core "k8s.io/api/core/v1"
 
 	"github.com/go-logr/logr"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -39,7 +38,6 @@ import (
 	imagereflectorv1 "github.com/fluxcd/image-reflector-controller/api/v1beta1"
 
 	pipelinev1alpha1 "github.com/jquad-group/pipeline-trigger-operator/api/v1alpha1"
-	meta "github.com/jquad-group/pipeline-trigger-operator/pkg/meta"
 
 	tektondevv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
 	clientsetversioned "github.com/tektoncd/pipeline/pkg/client/clientset/versioned"
@@ -117,130 +115,92 @@ func (r *PipelineTriggerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 				return ctrl.Result{}, err
 
 			} else {
-
-				// Hash the data in some way, or just use the version of the Object
-				pipelineTrigger.Status.LatestImage = foundImagePolicy.Status.LatestImage
-				//log.Info("Found PipelineTrigger", "resource", pipelineTrigger.Status.LatestImage)
-				msg := "Image Policy " + pipelineTrigger.Spec.ImagePolicy + " in namespace " + pipelineTrigger.Namespace + " got new version " + foundImagePolicy.Status.LatestImage
-				r.recorder.Event(&pipelineTrigger, core.EventTypeNormal, "Info", msg)
-
-				if pipelineTrigger.Spec.Pipeline.Name != "" {
-					Pipeline := pipelineTrigger.Spec.Pipeline
-					foundTektonPipeline := &tektondevv1.Pipeline{}
-					err := r.Get(ctx, types.NamespacedName{Name: Pipeline.Name, Namespace: pipelineTrigger.Namespace}, foundTektonPipeline)
-					if err != nil {
-						// If a pipeline name is provided, then it must exist
-						// You will likely want to create an Event for the user to understand why their reconcile is failing.
-						errorMsg := "Pipeline " + pipelineTrigger.Spec.Pipeline.Name + " in namespace " + pipelineTrigger.Namespace + " cannot be found."
-						r.recorder.Event(&pipelineTrigger, core.EventTypeWarning, "Error", errorMsg)
-						return ctrl.Result{}, err
-					}
-
-					cfg := ctrl.GetConfigOrDie()
-
-					tektonClient, err := clientsetversioned.NewForConfig(cfg)
-
-					if err != nil {
-						log.Info("Error building Serving clientset:", err)
-					} else {
-						log.Info("Successful initialized tekton client")
-					}
-
-					pipelineRunTypeMeta := meta.TypeMeta("PipelineRun", "tekton.dev/v1beta1")
-					pr := &tektondevv1.PipelineRun{
-						TypeMeta:   pipelineRunTypeMeta,
-						ObjectMeta: meta.ObjectMeta(meta.NamespacedName(pipelineTrigger.Namespace, pipelineTrigger.Name)),
-						Spec: tektondevv1.PipelineRunSpec{
-							//ServiceAccountName: "default",
-							PipelineRef: Pipeline.CreatePipelineRef(),
-							Params:      Pipeline.CreateParams(),
-							Workspaces: []tektondevv1.WorkspaceBinding{
-								Pipeline.Workspace.CreateWorkspaceBinding(),
-							},
-						},
-					}
-
-					opts := v1.CreateOptions{}
-
-					tektonClient.TektonV1beta1().PipelineRuns(pipelineTrigger.Namespace).Create(ctx, pr, opts)
-					msg := "PipelineRun " + pipelineTrigger.Name + " in namespace " + pipelineTrigger.Namespace + " created. "
+				var pipelineRun *tektondevv1.PipelineRun
+				if pipelineTrigger.Status.LatestImage != foundImagePolicy.Status.LatestImage {
+					pipelineTrigger.Status.LatestImage = foundImagePolicy.Status.LatestImage
+					msg := "Image Policy " + pipelineTrigger.Spec.ImagePolicy + " in namespace " + pipelineTrigger.Namespace + " got new version " + foundImagePolicy.Status.LatestImage
 					r.recorder.Event(&pipelineTrigger, core.EventTypeNormal, "Info", msg)
-
-					// examine DeletionTimestamp to determine if object is under deletion
-					if pipelineTrigger.ObjectMeta.DeletionTimestamp.IsZero() {
-						// The object is not being deleted, so if it does not have our finalizer,
-						// then lets add the finalizer and update the object. This is equivalent
-						// registering our finalizer.
-						if !containsString(pipelineTrigger.GetFinalizers(), myFinalizerName) {
-							controllerutil.AddFinalizer(&pipelineTrigger, myFinalizerName)
-							if err := r.Update(ctx, &pipelineTrigger); err != nil {
-								return ctrl.Result{}, err
-							}
-						}
-					} else {
-						// The object is being deleted
-						if containsString(pipelineTrigger.GetFinalizers(), myFinalizerName) {
-							// our finalizer is present, so lets handle any external dependency
-							if err := r.Delete(ctx, pr); err != nil {
-								// if fail to delete the external dependency here, return with error
-								// so that it can be retried
-								return ctrl.Result{}, err
-							}
-
-							// remove our finalizer from the list and update it.
-							controllerutil.RemoveFinalizer(&pipelineTrigger, myFinalizerName)
-							if err := r.Update(ctx, &pipelineTrigger); err != nil {
-								return ctrl.Result{}, err
-							}
-						}
-
-						// Stop reconciliation as the item is being deleted
-						return ctrl.Result{}, nil
+					ptErr := r.Status().Update(ctx, &pipelineTrigger)
+					if ptErr != nil {
+						log.Error(ptErr, "Failed to update PipelineTrigger status")
+						return ctrl.Result{}, ptErr
 					}
 
-					foundTektonPipelineRun := &tektondevv1.PipelineRun{}
-					prErr := r.Get(ctx, types.NamespacedName{Name: pipelineTrigger.Name, Namespace: pipelineTrigger.Namespace}, foundTektonPipelineRun)
-					if prErr != nil {
-						// If a pipeline name is provided, then it must exist
-						// You will likely want to create an Event for the user to understand why their reconcile is failing.
-						errorMsg := "PipelineRun " + pipelineTrigger.Spec.Pipeline.Name + " in namespace " + pipelineTrigger.Namespace + " cannot be found."
-						r.recorder.Event(&pipelineTrigger, core.EventTypeWarning, "Error", errorMsg)
-						return ctrl.Result{}, err
-					} else {
-						if foundTektonPipelineRun.Status.Conditions[0].Reason == tektondevv1.PipelineRunReasonStarted.String() {
-							pipelineTrigger.Status.PipelineStatus = "Started"
-							msg := "PipelineRun " + pipelineTrigger.Spec.Pipeline.Name + " in namespace " + pipelineTrigger.Namespace + " started."
-							r.recorder.Event(&pipelineTrigger, core.EventTypeNormal, "Info", msg)
-						} else if foundTektonPipelineRun.Status.Conditions[0].Reason == tektondevv1.PipelineRunReasonSuccessful.String() {
-							pipelineTrigger.Status.PipelineStatus = "Successful"
-							msg := "PipelineRun " + pipelineTrigger.Spec.Pipeline.Name + " in namespace " + pipelineTrigger.Namespace + " is successful."
-							r.recorder.Event(&pipelineTrigger, core.EventTypeNormal, "Info", msg)
-						} else if foundTektonPipelineRun.Status.Conditions[0].Reason == tektondevv1.PipelineRunReasonCompleted.String() {
-							pipelineTrigger.Status.PipelineStatus = "Completed"
-							msg := "PipelineRun " + pipelineTrigger.Spec.Pipeline.Name + " in namespace " + pipelineTrigger.Namespace + " has completed."
-							r.recorder.Event(&pipelineTrigger, core.EventTypeNormal, "Info", msg)
-						} else if foundTektonPipelineRun.Status.Conditions[0].Reason == tektondevv1.PipelineRunReasonCancelled.String() {
-							pipelineTrigger.Status.PipelineStatus = "Cancelled"
-							msg := "PipelineRun " + pipelineTrigger.Spec.Pipeline.Name + " in namespace " + pipelineTrigger.Namespace + " have been cancelled."
-							r.recorder.Event(&pipelineTrigger, core.EventTypeNormal, "Info", msg)
-						} else if foundTektonPipelineRun.Status.Conditions[0].Reason == tektondevv1.PipelineRunReasonPending.String() {
-							pipelineTrigger.Status.PipelineStatus = "Pending"
-							msg := "PipelineRun " + pipelineTrigger.Spec.Pipeline.Name + " in namespace " + pipelineTrigger.Namespace + " is pending."
-							r.recorder.Event(&pipelineTrigger, core.EventTypeNormal, "Info", msg)
-						} else {
-							pipelineTrigger.Status.PipelineStatus = "Failed"
-							msg := "PipelineRun " + pipelineTrigger.Spec.Pipeline.Name + " in namespace " + pipelineTrigger.Namespace + " has failed. See the logs for more information."
-							r.recorder.Event(&pipelineTrigger, core.EventTypeWarning, "Error", msg)
+					if pipelineTrigger.Spec.Pipeline.Name != "" {
+						Pipeline := pipelineTrigger.Spec.Pipeline
+						foundTektonPipeline := &tektondevv1.Pipeline{}
+						err := r.Get(ctx, types.NamespacedName{Name: Pipeline.Name, Namespace: pipelineTrigger.Namespace}, foundTektonPipeline)
+						if err != nil {
+							// If a pipeline name is provided, then it must exist
+							// You will likely want to create an Event for the user to understand why their reconcile is failing.
+							errorMsg := "Pipeline " + pipelineTrigger.Spec.Pipeline.Name + " in namespace " + pipelineTrigger.Namespace + " cannot be found."
+							r.recorder.Event(&pipelineTrigger, core.EventTypeWarning, "Error", errorMsg)
+							return ctrl.Result{}, err
 						}
-						/*
-							ptErr := r.Status().Update(ctx, &pipelineTrigger)
-							if ptErr != nil {
-								log.Error(ptErr, "Failed to update PipelineTrigger status")
-								return ctrl.Result{}, ptErr
-							}
-						*/
+
+						pr, err := Pipeline.CreatePipelineRun(ctx, req, pipelineTrigger)
+						pipelineRun = pr
+						msg := "PipelineRun " + pr.Name + " in namespace " + pr.Namespace + " created. "
+						r.recorder.Event(&pipelineTrigger, core.EventTypeNormal, "Info", msg)
+
 					}
 
+				}
+
+				foundTektonPipelineRun := &tektondevv1.PipelineRun{}
+				prErr := r.Get(ctx, types.NamespacedName{Name: pipelineRun.Name, Namespace: pipelineRun.Namespace}, foundTektonPipelineRun)
+				if prErr != nil {
+					errorMsg := "PipelineRun " + pipelineRun.Name + " in namespace " + pipelineRun.Namespace + " cannot be found."
+					r.recorder.Event(&pipelineTrigger, core.EventTypeWarning, "Error", errorMsg)
+					return ctrl.Result{}, err
+				} else {
+					if foundTektonPipelineRun.Status.Conditions[0].Reason == tektondevv1.PipelineRunReasonFailed.String() {
+						pipelineTrigger.Status.PipelineStatus = "Failed"
+						msg := "PipelineRun " + pipelineRun.Name + " in namespace " + pipelineRun.Namespace + " has failed. See the logs for more information."
+						r.recorder.Event(&pipelineTrigger, core.EventTypeWarning, "Error", msg)
+					} else {
+						pipelineTrigger.Status.PipelineStatus = foundTektonPipelineRun.Status.Conditions[0].Reason
+						msg := "PipelineRun " + pipelineRun.Name + " in namespace " + pipelineRun.Namespace + " is with status: " + foundTektonPipelineRun.Status.Conditions[0].Reason
+						r.recorder.Event(&pipelineTrigger, core.EventTypeNormal, "Info", msg)
+					}
+
+					ptErr := r.Status().Update(ctx, &pipelineTrigger)
+					if ptErr != nil {
+						log.Error(ptErr, "Failed to update PipelineTrigger status")
+						return ctrl.Result{}, ptErr
+					}
+				}
+
+				// examine DeletionTimestamp to determine if object is under deletion
+				if pipelineTrigger.ObjectMeta.DeletionTimestamp.IsZero() {
+					// The object is not being deleted, so if it does not have our finalizer,
+					// then lets add the finalizer and update the object. This is equivalent
+					// registering our finalizer.
+					if !containsString(pipelineTrigger.GetFinalizers(), myFinalizerName) {
+						controllerutil.AddFinalizer(&pipelineTrigger, myFinalizerName)
+						if err := r.Update(ctx, &pipelineTrigger); err != nil {
+							return ctrl.Result{}, err
+						}
+					}
+				} else {
+					// The object is being deleted
+					if containsString(pipelineTrigger.GetFinalizers(), myFinalizerName) {
+						// our finalizer is present, so lets handle any external dependency
+						if err := r.Delete(ctx, pipelineRun); err != nil {
+							// if fail to delete the external dependency here, return with error
+							// so that it can be retried
+							return ctrl.Result{}, err
+						}
+
+						// remove our finalizer from the list and update it.
+						controllerutil.RemoveFinalizer(&pipelineTrigger, myFinalizerName)
+						if err := r.Update(ctx, &pipelineTrigger); err != nil {
+							return ctrl.Result{}, err
+						}
+					}
+
+					// Stop reconciliation as the item is being deleted
+					return ctrl.Result{}, nil
 				}
 
 			}

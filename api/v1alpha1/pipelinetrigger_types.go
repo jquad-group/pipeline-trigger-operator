@@ -30,7 +30,6 @@ type PipelineTrigger struct {
 
 	Spec PipelineTriggerSpec `json:"spec,omitempty"`
 
-	// +kubebuilder:default={"observedGeneration":-1}
 	Status PipelineTriggerStatus `json:"status,omitempty"`
 }
 
