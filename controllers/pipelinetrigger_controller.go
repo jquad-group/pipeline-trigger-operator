@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+
 	//"errors"
 
 	core "k8s.io/api/core/v1"
@@ -136,7 +137,7 @@ func (r *PipelineTriggerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			return ctrl.Result{}, err
 		}
 
-		// check if a pipelinerun already exists, if not create a new one
+		// check if a pipelinerun already exists, if not create a new one,
 		foundPipelineRun := &tektondevv1.PipelineRun{}
 		err = r.Get(ctx, types.NamespacedName{Name: pipelineTrigger.Name, Namespace: pipelineTrigger.Namespace}, foundPipelineRun)
 		if err != nil && errors.IsNotFound(err) {
@@ -173,6 +174,21 @@ func (r *PipelineTriggerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 				return ctrl.Result{}, ptErrStatus
 			}
 			return ctrl.Result{Requeue: true}, nil
+		} else if pipelineTrigger.Status.PipelineStatus == "Succeeded" {
+			err := r.Delete(ctx, foundPipelineRun)
+			if err != nil {
+				log.Error(err, "Failed to delete PipelineRun")
+				return ctrl.Result{}, err
+			}
+			msg := "PipelineRun " + foundPipelineRun.Name + " in namespace " + foundPipelineRun.Namespace + " deleted. "
+			r.recorder.Event(&pipelineTrigger, core.EventTypeNormal, "Info", msg)
+			pipelineTrigger.Status.PipelineStatus = "Succeeded and Removed"
+			ptErrStatus := r.Status().Update(ctx, &pipelineTrigger)
+			if ptErrStatus != nil {
+				log.Error(ptErrStatus, "Failed to update PipelineTrigger status")
+				return ctrl.Result{}, ptErrStatus
+			}
+			return ctrl.Result{}, err
 		}
 	}
 
