@@ -35,6 +35,7 @@ import (
 	"github.com/jquad-group/pipeline-trigger-operator/controllers"
 
 	imagereflectorv1 "github.com/fluxcd/image-reflector-controller/api/v1beta1"
+	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 	tektondevv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
 	//+kubebuilder:scaffold:imports
 )
@@ -48,6 +49,7 @@ func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(imagereflectorv1.AddToScheme(scheme))
 	utilruntime.Must(tektondevv1.AddToScheme(scheme))
+	utilruntime.Must(sourcev1.AddToScheme(scheme))
 	utilruntime.Must(pipelinev1alpha1.AddToScheme(scheme))
 	//+kubebuilder:scaffold:scheme
 }

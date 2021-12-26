@@ -1,0 +1,19 @@
+apiVersion: source.toolkit.fluxcd.io/v1beta1
+kind: GitRepository
+metadata:
+  name: app1
+  namespace: pipeline-trigger-operator-system
+spec:
+  interval: 1m
+  url: https://github.com/jquad-group/test-repo.git
+  ref:
+    branch: main
+---
+apiVersion: image.toolkit.fluxcd.io/v1beta1
+kind: ImageRepository
+metadata:
+  name: app1
+  namespace: pipeline-trigger-operator-system
+spec:
+  interval: 5m
+  image: rannox/testimage

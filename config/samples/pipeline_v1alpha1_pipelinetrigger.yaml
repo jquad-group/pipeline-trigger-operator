@@ -1,10 +1,48 @@
 apiVersion: pipeline.jquad.rocks/v1alpha1
 kind: PipelineTrigger
 metadata:
-  name: pipelinetrigger-sample
+  name: pipelinetrigger-sample-git
   namespace: pipeline-trigger-operator-system
 spec:
-  imagePolicy: app1
+  source: 
+    kind: GitRepository
+    name: app1
+  pipeline: 
+    name: build-and-push-base-image
+    workspace:
+      name: workspace
+      size: 1Gi
+      accessMode: ReadWriteOnce
+    inputParams:
+      - name: "repo-url"
+        value: "git@github.com:jquad-group/www-jquad.git"
+      - name: "branch-name"
+        value: "main"
+      - name: "projectname"
+        value: "www-jquad"
+      - name: "repositoryName"
+        value: "www-jquad"
+      - name: "imageTag"
+        value: "0.0.5"
+      - name: "commit"
+        value: ""
+      - name: "imageLocation"
+        value: "harbor.jquad.rocks/library"
+      - name: "pathToDockerFile"
+        value: "/workspace/repo"
+      - name: "pathToContext"
+        value: "/workspace/repo/Dockerfile"
+  # Add fields here
+---
+apiVersion: pipeline.jquad.rocks/v1alpha1
+kind: PipelineTrigger
+metadata:
+  name: pipelinetrigger-sample-image
+  namespace: pipeline-trigger-operator-system
+spec:
+  source: 
+    kind: ImagePolicy
+    name: app1
   pipeline: 
     name: build-and-push-base-image
     workspace:

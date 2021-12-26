@@ -1,0 +1,45 @@
+apiVersion: tekton.dev/v1beta1
+kind: PipelineRun
+metadata:
+  name: build-and-push-webpage
+  namespace: pipeline-trigger-operator-system
+spec:
+  serviceAccountName: build-robot
+  params:
+    - name: imageLocation
+      value: harbor.jquad.rocks/library
+      #value: harbor-core.harbor.svc.cluster.local/library
+    - name: repositoryName
+      value: www-jquad
+    - name: imageTag
+      value: 0.0.3
+    - name: pathToContext
+      value: /workspace/repo
+    - name: pathToDockerFile
+      value: /workspace/repo/Dockerfile
+    - name: commit
+      value: ""
+    - name: branch-name
+      value: main
+    - name: repo-url
+      value: git@github.com:jquad-group/www-jquad.git
+    - name: repo-url-alternate
+      value: git@github.com:jquad-group/www-jquad.git
+    - name: gitrevision
+      value: main
+    - name: projectname
+      value: www-jquad
+  pipelineRef:
+    name: build-and-push-base-image
+  podTemplate:
+    imagePullSecrets:
+      - name: regcred
+  workspaces:
+    - name: workspace
+      volumeClaimTemplate:
+        spec:
+          accessModes:
+            - ReadWriteOnce # access mode may affect how you can use this volume in parallel tasks
+          resources:
+            requests:
+              storage: 1Gi

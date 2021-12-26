@@ -35,14 +35,10 @@ type PipelineTrigger struct {
 
 // PipelineTriggerSpec defines the desired state of PipelineTrigger
 type PipelineTriggerSpec struct {
-	// AppVersion is the version of the application
-	// that should be built
-	AppVersion string `json:"appVersion,omitempty"`
-
-	// ImagePolicy points at the object specifying the latest image
+	// Source points at the object specifying the Image Policy or Git Repository
 	// found
 	// +required
-	ImagePolicy string `json:"imagePolicy"`
+	Source Source `json:"source"`
 
 	// Pipeline points at the object specifying the tekton pipeline
 	// +required
@@ -56,6 +52,10 @@ type PipelineTriggerStatus struct {
 	// the policy.
 	LatestImage string `json:"latestImage,omitempty"`
 	// +optional
+
+	LatestRevision string `json:"latestRevision,omitempty"`
+
+	LatestEvent string `json:"latestEvent,omitempty"`
 
 	// PipelineStatus gives the status of the
 	// tekton pipeline currently running.

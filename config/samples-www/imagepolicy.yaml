@@ -1,0 +1,95 @@
+apiVersion: image.toolkit.fluxcd.io/v1beta1
+kind: ImagePolicy
+metadata:
+  name: app1
+  namespace: test-build
+spec:
+  imageRepositoryRef:
+    name: app1
+    namespace: test-build
+  policy:
+    semver:
+      range: 0.0.x
+---
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: clone
+  namespace: test-build
+spec:
+  steps:
+    - name: clone
+      image: ubuntu
+      command:
+        - echo
+      args:
+        - "clone"
+---
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: assemble-and-push
+  namespace: test-build
+spec:
+  steps:
+    - name: assemble-and-push
+      image: ubuntu
+      command:
+        - echo
+      args:
+        - "assemble-and-push"        
+---
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: build-and-push-base-image
+  namespace: test-build
+spec:
+  workspaces:
+    - name: workspace
+  params:
+    - name: repo-url
+      type: string
+    - name: repo-url-alternate
+      type: string
+      description: The git repository URL to clone from.
+      default: ""
+    - name: branch-name
+      type: string
+      description: The git branch to clone.
+    - name: projectname
+      type: string
+      description: the git project name
+    - name: repositoryName
+      type: string
+      description: the name of the image
+    - name: imageTag
+      description: the tag of the image
+      type: string
+    - name: commit
+      type: string
+      description: latest commit id
+    - name: imageLocation
+      description: Location where the resulting docker image will be pushed to
+      type: string
+    - name: pathToDockerFile
+      description: The path to the build context, used by Kaniko - within the workspace
+      type: string
+    - name: pathToContext
+      type: string
+      description: The build context used by Kaniko
+    - name: subdirectory
+      type: string
+      description: subdirectory
+      default: ""
+  tasks:
+    - name: clone
+      taskRef:
+        name: clone
+        kind: Task
+    - name: assemble-and-push
+      taskRef:
+        name: assemble-and-push
+        kind: Task
+      runAfter:
+        - clone

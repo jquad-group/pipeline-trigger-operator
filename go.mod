@@ -5,6 +5,7 @@ go 1.16
 require (
 	github.com/Azure/go-autorest/autorest v0.11.18 // indirect
 	github.com/fluxcd/image-reflector-controller/api v0.13.2
+	github.com/fluxcd/source-controller/api v0.15.0 
 	github.com/form3tech-oss/jwt-go v3.2.3+incompatible // indirect
 	github.com/go-logr/logr v0.4.0
 	github.com/onsi/ginkgo v1.16.4

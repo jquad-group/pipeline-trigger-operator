@@ -39,6 +39,7 @@ import (
 
 	imagereflectorv1 "github.com/fluxcd/image-reflector-controller/api/v1beta1"
 
+	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 	pipelinev1alpha1 "github.com/jquad-group/pipeline-trigger-operator/api/v1alpha1"
 
 	tektondevv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
@@ -46,7 +47,8 @@ import (
 )
 
 const (
-	imagePolicyField = ".spec.imagePolicy"
+	sourceField      = ".spec.source.name"
+	pipelineField    = ".spec.pipeline.name"
 	pipelineRunField = ".name"
 	myFinalizerName  = "pipeline.jquad.rocks/finalizer"
 )
@@ -76,6 +78,8 @@ There are two additional resources that the controller needs to have access to, 
 //+kubebuilder:rbac:groups=jquad.rocks.pipeline,resources=pipelinetriggers/finalizers,verbs=update
 //+kubebuilder:rbac:groups=image.toolkit.fluxcd.io,resources=imagepolicies,verbs=get;list;watch
 //+kubebuilder:rbac:groups=image.toolkit.fluxcd.io,resources=imagepolicies/status,verbs=get;list;watch
+//+kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=gitrepositories,verbs=get;list;watch
+//+kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=gitrepositories/status,verbs=get;list;watch
 //+kubebuilder:rbac:groups=tekton.dev,resources=pipelineruns,verbs=get;list;watch;create;delete;patch;update
 //+kubebuilder:rbac:groups=tekton.dev,resources=pipelines,verbs=get;list;watch;create;delete;patch;update
 //+kubebuilder:rbac:groups="",resources=events,verbs=create;patch;update;get;list;watch
@@ -104,27 +108,33 @@ func (r *PipelineTriggerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	ImagePolicy := pipelineTrigger.Spec.ImagePolicy
-	foundImagePolicy := &imagereflectorv1.ImagePolicy{}
-	err := r.Get(ctx, types.NamespacedName{Name: ImagePolicy, Namespace: pipelineTrigger.Namespace}, foundImagePolicy)
+	source := pipelineTrigger.Spec.Source
+	var err error
+	var latestEvent string
+	if source.Kind == "ImagePolicy" {
+		foundSource := &imagereflectorv1.ImagePolicy{}
+		err = r.Get(ctx, types.NamespacedName{Name: source.Name, Namespace: pipelineTrigger.Namespace}, foundSource)
+		latestEvent = foundSource.Status.LatestImage
+	} else if source.Kind == "GitRepository" {
+		foundSource := &sourcev1.GitRepository{}
+		err = r.Get(ctx, types.NamespacedName{Name: source.Name, Namespace: pipelineTrigger.Namespace}, foundSource)
+		latestEvent = foundSource.Status.Artifact.Revision
+	} else {
+		return ctrl.Result{}, err
+	}
+
 	if err != nil {
-		// If a imagePolicy name is provided, then it must exist
+		// If a Source name is provided, then it must exist
 		// Create an Event for the user to understand why their reconcile is failing.
-		errorMsg := "Image Policy " + pipelineTrigger.Spec.ImagePolicy + " in namespace " + pipelineTrigger.Namespace + "cannot be found."
+		errorMsg := "Source " + pipelineTrigger.Spec.Source.Name + " in namespace " + pipelineTrigger.Namespace + "cannot be found."
 		r.recorder.Event(&pipelineTrigger, core.EventTypeWarning, "Error", errorMsg)
 		return ctrl.Result{}, err
 
 	}
 
-	if pipelineTrigger.Status.LatestImage != foundImagePolicy.Status.LatestImage {
-		pipelineTrigger.Status.LatestImage = foundImagePolicy.Status.LatestImage
-		newVersionMsg := "Image Policy " + pipelineTrigger.Spec.ImagePolicy + " in namespace " + pipelineTrigger.Namespace + " got new version " + foundImagePolicy.Status.LatestImage
+	if pipelineTrigger.Status.LatestEvent != latestEvent {
+		newVersionMsg := "Source " + pipelineTrigger.Spec.Source.Name + " in namespace " + pipelineTrigger.Namespace + " got new event " + latestEvent
 		r.recorder.Event(&pipelineTrigger, core.EventTypeNormal, "Info", newVersionMsg)
-		ptErr := r.Status().Update(ctx, &pipelineTrigger)
-		if ptErr != nil {
-			log.Error(ptErr, "Failed to update PipelineTrigger status")
-			return ctrl.Result{}, ptErr
-		}
 
 		Pipeline := pipelineTrigger.Spec.Pipeline
 		foundTektonPipeline := &tektondevv1.Pipeline{}
@@ -134,6 +144,8 @@ func (r *PipelineTriggerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			// You will likely want to create an Event for the user to understand why their reconcile is failing.
 			errorMsg := "Pipeline " + pipelineTrigger.Spec.Pipeline.Name + " in namespace " + pipelineTrigger.Namespace + " cannot be found."
 			r.recorder.Event(&pipelineTrigger, core.EventTypeWarning, "Error", errorMsg)
+			pipelineTrigger.Status.PipelineStatus = "Error"
+			r.Status().Update(ctx, &pipelineTrigger)
 			return ctrl.Result{}, err
 		}
 
@@ -186,7 +198,8 @@ func (r *PipelineTriggerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 			// remove our finalizer from the list and update it.
 			controllerutil.RemoveFinalizer(&pipelineTrigger, myFinalizerName)
-			pipelineTrigger.Status.PipelineStatus = "Succeeded and Removed"
+			pipelineTrigger.Status.LatestEvent = latestEvent
+			pipelineTrigger.Status.PipelineStatus = "SucceededAndRemoved"
 			r.Status().Update(ctx, &pipelineTrigger)
 			msg := "PipelineRun " + foundPipelineRun.Name + " in namespace " + foundPipelineRun.Namespace + " deleted. "
 			r.recorder.Event(&pipelineTrigger, core.EventTypeNormal, "Info", msg)
@@ -217,26 +230,26 @@ func (r *PipelineTriggerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.recorder = mgr.GetEventRecorderFor("PipelineTrigger")
 
 	/*
-		The `imagePolicy` field must be indexed by the manager, so that we will be able to lookup `PipelineTriggers` by a referenced `ImagePolicy` name.
+		The `source.name` field must be indexed by the manager, so that we will be able to lookup `PipelineTriggers` by a referenced `source.name` name.
 		This will allow for quickly answer the question:
-		- If ImagePolicy _x_ is updated, which PipelineTrigger are affected?
+		- If source _x_ is updated, which PipelineTrigger are affected?
 	*/
 
-	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &pipelinev1alpha1.PipelineTrigger{}, imagePolicyField, func(rawObj client.Object) []string {
-		// Extract the ImagePolicy name from the PipelineTrigger Spec, if one is provided
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &pipelinev1alpha1.PipelineTrigger{}, sourceField, func(rawObj client.Object) []string {
+		// Extract the Source name from the PipelineTrigger Spec, if one is provided
 		pipelineTrigger := rawObj.(*pipelinev1alpha1.PipelineTrigger)
-		if pipelineTrigger.Spec.ImagePolicy == "" {
+		if pipelineTrigger.Spec.Source.Name == "" {
 			return nil
 		}
-		return []string{pipelineTrigger.Spec.ImagePolicy}
+		return []string{pipelineTrigger.Spec.Source.Name}
 	}); err != nil {
 		return err
 	}
 
 	/*
-		The `pipelineRunField` field must be indexed by the manager, so that we will be able to lookup `PipelineTriggers` by a referenced `PipelineRun` name.
+		The `pipelineRunField` field must be indexed by the manager, so that we will be able to lookup `PipelineTriggers` by a referenced `pipelineRunField` name.
 		This will allow for quickly answer the question:
-		- If PipelineRun _x_ is updated, which PipelineTrigger are affected?
+		- If pipelineRunField _x_ is updated, which PipelineTrigger are affected?
 	*/
 
 	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &pipelinev1alpha1.PipelineTrigger{}, pipelineRunField, func(rawObj client.Object) []string {
@@ -246,6 +259,23 @@ func (r *PipelineTriggerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			return nil
 		}
 		return []string{pipelineTrigger.Name}
+	}); err != nil {
+		return err
+	}
+
+	/*
+		The `pipelineField` field must be indexed by the manager, so that we will be able to lookup `PipelineTriggers` by a referenced `pipelineField` name.
+		This will allow for quickly answer the question:
+		- If pipelineField _x_ is updated, which PipelineTrigger are affected?
+	*/
+
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &pipelinev1alpha1.PipelineTrigger{}, pipelineField, func(rawObj client.Object) []string {
+		// Extract the Pipeline name from the PipelineTrigger Spec, if one is provided
+		pipelineTrigger := rawObj.(*pipelinev1alpha1.PipelineTrigger)
+		if pipelineTrigger.Spec.Pipeline.Name == "" {
+			return nil
+		}
+		return []string{pipelineTrigger.Spec.Pipeline.Name}
 	}); err != nil {
 		return err
 	}
@@ -266,7 +296,12 @@ func (r *PipelineTriggerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&tektondevv1.PipelineRun{}).
 		Watches(
 			&source.Kind{Type: &imagereflectorv1.ImagePolicy{}},
-			handler.EnqueueRequestsFromMapFunc(r.findObjectsForImagePolicy),
+			handler.EnqueueRequestsFromMapFunc(r.findObjectsForSource),
+			//builder.WithPredicates(predicate.ResourceVersionChangedPredicate{}),
+		).
+		Watches(
+			&source.Kind{Type: &sourcev1.GitRepository{}},
+			handler.EnqueueRequestsFromMapFunc(r.findObjectsForSource),
 			//builder.WithPredicates(predicate.ResourceVersionChangedPredicate{}),
 		).
 		Watches(
@@ -274,23 +309,51 @@ func (r *PipelineTriggerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			handler.EnqueueRequestsFromMapFunc(r.findObjectsForPipelineRun),
 			//builder.WithPredicates(predicate.ResourceVersionChangedPredicate{}),
 		).
+		Watches(
+			&source.Kind{Type: &tektondevv1.Pipeline{}},
+			handler.EnqueueRequestsFromMapFunc(r.findObjectsForPipeline),
+			//builder.WithPredicates(predicate.ResourceVersionChangedPredicate{}),
+		).
 		Complete(r)
 
 }
 
 /*
-	Because we have already created an index on the `imagePolicy` reference field, this mapping function is quite straight forward.
-	We first need to list out all `PipelineTriggers` that use `ImagePolicy` given in the mapping function.
+	Because we have already created an index on the `source.name` reference field, this mapping function is quite straight forward.
+	We first need to list out all `PipelineTriggers` that use `source.name` given in the mapping function.
 	This is done by merely submitting a List request using our indexed field as the field selector.
-	When the list of `PipelineTriggers` that reference the `ImagePolicy` is found,
+	When the list of `PipelineTriggers` that reference the `ImagePolicy` or `GitRepository` is found,
 	we just need to loop through the list and create a reconcile request for each one.
 	If an error occurs fetching the list, or no `PipelineTriggers` are found, then no reconcile requests will be returned.
 */
-func (r *PipelineTriggerReconciler) findObjectsForImagePolicy(imagePolicy client.Object) []reconcile.Request {
+func (r *PipelineTriggerReconciler) findObjectsForSource(source client.Object) []reconcile.Request {
 	attachedPipelineTriggers := &pipelinev1alpha1.PipelineTriggerList{}
 	listOps := &client.ListOptions{
-		FieldSelector: fields.OneTermEqualSelector(imagePolicyField, imagePolicy.GetName()),
-		Namespace:     imagePolicy.GetNamespace(),
+		FieldSelector: fields.OneTermEqualSelector(sourceField, source.GetName()),
+		Namespace:     source.GetNamespace(),
+	}
+	err := r.List(context.TODO(), attachedPipelineTriggers, listOps)
+	if err != nil {
+		return []reconcile.Request{}
+	}
+
+	requests := make([]reconcile.Request, len(attachedPipelineTriggers.Items))
+	for i, item := range attachedPipelineTriggers.Items {
+		requests[i] = reconcile.Request{
+			NamespacedName: types.NamespacedName{
+				Name:      item.GetName(),
+				Namespace: item.GetNamespace(),
+			},
+		}
+	}
+	return requests
+}
+
+func (r *PipelineTriggerReconciler) findObjectsForPipeline(pipeline client.Object) []reconcile.Request {
+	attachedPipelineTriggers := &pipelinev1alpha1.PipelineTriggerList{}
+	listOps := &client.ListOptions{
+		FieldSelector: fields.OneTermEqualSelector(pipelineField, pipeline.GetName()),
+		Namespace:     pipeline.GetNamespace(),
 	}
 	err := r.List(context.TODO(), attachedPipelineTriggers, listOps)
 	if err != nil {

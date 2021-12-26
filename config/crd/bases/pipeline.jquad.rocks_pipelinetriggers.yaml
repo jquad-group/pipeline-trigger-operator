@@ -36,14 +36,6 @@ spec:
           spec:
             description: PipelineTriggerSpec defines the desired state of PipelineTrigger
             properties:
-              appVersion:
-                description: AppVersion is the version of the application that should
-                  be built
-                type: string
-              imagePolicy:
-                description: ImagePolicy points at the object specifying the latest
-                  image found
-                type: string
               pipeline:
                 description: Pipeline points at the object specifying the tekton pipeline
                 properties:
@@ -73,17 +65,39 @@ spec:
                         type: string
                     type: object
                 type: object
+              source:
+                description: Source points at the object specifying the Image Policy
+                  or Git Repository found
+                properties:
+                  kind:
+                    description: Kind of the source refernce.
+                    enum:
+                    - ImagePolicy
+                    - GitRepository
+                    type: string
+                  name:
+                    description: Name of the source reference.
+                    maxLength: 253
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
             required:
-            - imagePolicy
             - pipeline
+            - source
             type: object
           status:
             description: PipelineTriggerStatus defines the observed state of PipelineTrigger
             properties:
+              latestEvent:
+                type: string
               latestImage:
                 description: LatestImage gives the first in the list of images scanned
                   by the image repository, when filtered and ordered according to
                   the policy.
+                type: string
+              latestRevision:
                 type: string
               pipelineReason:
                 description: PipelineReason gives the reason of the tekton pipeline

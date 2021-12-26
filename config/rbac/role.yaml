@@ -60,6 +60,22 @@ rules:
   - patch
   - update
 - apiGroups:
+  - source.toolkit.fluxcd.io
+  resources:
+  - gitrepositories
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - source.toolkit.fluxcd.io
+  resources:
+  - gitrepositories/status
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
   - tekton.dev
   resources:
   - pipelineruns
