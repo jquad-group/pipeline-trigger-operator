@@ -30,16 +30,18 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	imagereflectorv1 "github.com/fluxcd/image-reflector-controller/api/v1beta1"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
+	"github.com/jquad-group/pipeline-trigger-operator/api/v1alpha1"
 	pipelinev1alpha1 "github.com/jquad-group/pipeline-trigger-operator/api/v1alpha1"
 
 	tektondevv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
@@ -47,10 +49,11 @@ import (
 )
 
 const (
-	sourceField      = ".spec.source.name"
-	pipelineField    = ".spec.pipeline.name"
-	pipelineRunField = ".name"
-	myFinalizerName  = "pipeline.jquad.rocks/finalizer"
+	sourceField                 = ".spec.source.name"
+	pipelineField               = ".spec.pipeline.name"
+	pipelineRunField            = ".name"
+	myFinalizerName             = "pipeline.jquad.rocks/finalizer"
+	pipelineRunLabelLatestEvent = "pipeline.jquad.rocks/latestEvent"
 )
 
 // PipelineTriggerReconciler reconciles a PipelineTrigger object
@@ -108,16 +111,15 @@ func (r *PipelineTriggerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	source := pipelineTrigger.Spec.Source
 	var err error
 	var latestEvent string
-	if source.Kind == "ImagePolicy" {
+	if pipelineTrigger.Spec.Source.Kind == "ImagePolicy" {
 		foundSource := &imagereflectorv1.ImagePolicy{}
-		err = r.Get(ctx, types.NamespacedName{Name: source.Name, Namespace: pipelineTrigger.Namespace}, foundSource)
+		err = r.Get(ctx, types.NamespacedName{Name: pipelineTrigger.Spec.Source.Name, Namespace: pipelineTrigger.Namespace}, foundSource)
 		latestEvent = foundSource.Status.LatestImage
-	} else if source.Kind == "GitRepository" {
+	} else if pipelineTrigger.Spec.Source.Kind == "GitRepository" {
 		foundSource := &sourcev1.GitRepository{}
-		err = r.Get(ctx, types.NamespacedName{Name: source.Name, Namespace: pipelineTrigger.Namespace}, foundSource)
+		err = r.Get(ctx, types.NamespacedName{Name: pipelineTrigger.Spec.Source.Name, Namespace: pipelineTrigger.Namespace}, foundSource)
 		latestEvent = foundSource.Status.Artifact.Revision
 	} else {
 		return ctrl.Result{}, err
@@ -132,28 +134,43 @@ func (r *PipelineTriggerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 	}
 
-	if pipelineTrigger.Status.LatestEvent != latestEvent {
+	foundTektonPipeline := &tektondevv1.Pipeline{}
+	err = r.Get(ctx, types.NamespacedName{Name: pipelineTrigger.Spec.Pipeline.Name, Namespace: pipelineTrigger.Namespace}, foundTektonPipeline)
+	if err != nil {
+		// If a pipeline name is provided, then it must exist
+		// You will likely want to create an Event for the user to understand why their reconcile is failing.
+		errorMsg := "Pipeline " + pipelineTrigger.Spec.Pipeline.Name + " in namespace " + pipelineTrigger.Namespace + " cannot be found."
+		r.recorder.Event(&pipelineTrigger, core.EventTypeWarning, "Error", errorMsg)
+		pipelineTrigger.Status.PipelineStatus = "Error"
+		r.Status().Update(ctx, &pipelineTrigger)
+		return ctrl.Result{}, err
+	}
+
+	if latestEvent != pipelineTrigger.Status.LatestEvent {
 		newVersionMsg := "Source " + pipelineTrigger.Spec.Source.Name + " in namespace " + pipelineTrigger.Namespace + " got new event " + latestEvent
 		r.recorder.Event(&pipelineTrigger, core.EventTypeNormal, "Info", newVersionMsg)
-
-		Pipeline := pipelineTrigger.Spec.Pipeline
-		foundTektonPipeline := &tektondevv1.Pipeline{}
-		err := r.Get(ctx, types.NamespacedName{Name: Pipeline.Name, Namespace: pipelineTrigger.Namespace}, foundTektonPipeline)
-		if err != nil {
-			// If a pipeline name is provided, then it must exist
-			// You will likely want to create an Event for the user to understand why their reconcile is failing.
-			errorMsg := "Pipeline " + pipelineTrigger.Spec.Pipeline.Name + " in namespace " + pipelineTrigger.Namespace + " cannot be found."
-			r.recorder.Event(&pipelineTrigger, core.EventTypeWarning, "Error", errorMsg)
-			pipelineTrigger.Status.PipelineStatus = "Error"
-			r.Status().Update(ctx, &pipelineTrigger)
-			return ctrl.Result{}, err
-		}
+		pipelineTrigger.Status.LatestPipelineRun = ""
+		pipelineTrigger.Status.PipelineStatus = ""
+		r.Status().Update(ctx, &pipelineTrigger)
 
 		// check if a pipelinerun already exists, if not create a new one,
 		foundPipelineRun := &tektondevv1.PipelineRun{}
-		err = r.Get(ctx, types.NamespacedName{Name: pipelineTrigger.Name, Namespace: pipelineTrigger.Namespace}, foundPipelineRun)
+		err = r.Get(ctx, types.NamespacedName{Name: pipelineTrigger.Status.LatestPipelineRun, Namespace: pipelineTrigger.Namespace}, foundPipelineRun)
 		if err != nil && errors.IsNotFound(err) {
-			pr, pipelineRunError := Pipeline.CreatePipelineRun(ctx, req, pipelineTrigger)
+			pr, pipelineRunError := pipelineTrigger.Spec.Pipeline.CreatePipelineRun(ctx, req, pipelineTrigger)
+			//labelShouldBePresent := pr.Labels[pipelineRunLabelLatestEvent] == "true"
+			//if labelShouldBePresent {
+			// If the label should be set but is not, set it.
+			//if pr.Labels == nil {
+			pr.Labels = make(map[string]string)
+			//}
+			pr.Labels[pipelineRunLabelLatestEvent] = latestEvent
+			//}
+			r.Update(ctx, pr)
+			pipelineTrigger.Status.LatestPipelineRun = pr.Name
+			foundPipelineRun = pr
+			pipelineTrigger.Status.LatestEvent = latestEvent
+			r.Status().Update(ctx, &pipelineTrigger)
 			ctrl.SetControllerReference(&pipelineTrigger, pr, r.Scheme)
 			if pipelineRunError != nil {
 				log.Error(err, "Failed to create new PipelineRun", "PipelineTrigger.Namespace", pipelineTrigger.Namespace, "PipelineTrigger.Name", pipelineTrigger.Name)
@@ -169,50 +186,66 @@ func (r *PipelineTriggerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 	}
 
-	foundPipelineRun := &tektondevv1.PipelineRun{}
-	if err := r.Get(ctx, types.NamespacedName{Name: pipelineTrigger.Name, Namespace: pipelineTrigger.Namespace}, foundPipelineRun); err != nil {
-		// we'll ignore not-found errors, since they can't be fixed by an immediate
-		// requeue (we'll need to wait for a new notification), and we can get them
-		// on deleted requests.
-		return ctrl.Result{}, client.IgnoreNotFound(err)
+	if (pipelineTrigger.Status.PipelineStatus != "Completed") && (pipelineTrigger.Status.PipelineStatus == "Succeeded") {
+		//pipelineTrigger.Status.LatestEvent = latestEvent
+		//r.Status().Update(ctx, &pipelineTrigger)
+		return ctrl.Result{}, nil
+	} else if (pipelineTrigger.Status.PipelineStatus == "Completed") && (pipelineTrigger.Status.PipelineStatus != "Succeeded") {
+		//pipelineTrigger.Status.LatestEvent = latestEvent
+		//r.Status().Update(ctx, &pipelineTrigger)
+		return ctrl.Result{}, nil
+	} else {
+		foundPipelineRun := &tektondevv1.PipelineRun{}
+		err = r.Get(ctx, types.NamespacedName{Name: pipelineTrigger.Status.LatestPipelineRun, Namespace: pipelineTrigger.Namespace}, foundPipelineRun)
+		r.reconcilePipelineRun(ctx, foundPipelineRun, pipelineTrigger)
 	}
 
-	if len(foundPipelineRun.Status.Conditions) > 0 {
-		if pipelineTrigger.Status.PipelineStatus != foundPipelineRun.Status.Conditions[0].Reason {
-			pipelineTrigger.Status.PipelineStatus = foundPipelineRun.Status.Conditions[0].Reason
-			msg := "PipelineRun " + foundPipelineRun.Name + " in namespace " + foundPipelineRun.Namespace + " is with status: " + foundPipelineRun.Status.Conditions[0].Reason
-			r.recorder.Event(&pipelineTrigger, core.EventTypeNormal, "Info", msg)
-			ptErrStatus := r.Status().Update(ctx, &pipelineTrigger)
+	/*
+			else if pipelineTrigger.Status.PipelineStatus == "Succeeded" || pipelineTrigger.Status.PipelineStatus == "Completed" {
+
+				if err := r.Delete(ctx, foundPipelineRun); err != nil {
+					// if fail to delete the external dependency here, return with error
+					// so that it can be retried
+					return ctrl.Result{}, err
+
+
+
+				// remove our finalizer from the list and update it.
+				controllerutil.RemoveFinalizer(&pipelineTrigger, myFinalizerName)
+				pipelineTrigger.Status.LatestEvent = latestEvent
+				pipelineTrigger.Status.PipelineStatus = "SucceededAndRemoved"
+				r.Status().Update(ctx, &pipelineTrigger)
+				msg := "PipelineRun " + foundPipelineRun.Name + " in namespace " + foundPipelineRun.Namespace + " deleted. "
+				r.recorder.Event(&pipelineTrigger, core.EventTypeNormal, "Info", msg)
+				if err := r.Update(ctx, &pipelineTrigger); err != nil {
+					return ctrl.Result{}, err
+				}
+				return ctrl.Result{}, nil
+
+			}
+		}
+	*/
+	return ctrl.Result{}, nil
+
+}
+
+func (r *PipelineTriggerReconciler) reconcilePipelineRun(ctx context.Context, pr *tektondevv1.PipelineRun, pt v1alpha1.PipelineTrigger) (result ctrl.Result, err error) {
+	log := logr.FromContext(ctx)
+
+	if len(pr.Status.Conditions) > 0 {
+		if pt.Status.PipelineStatus != pr.Status.Conditions[0].Reason {
+			pt.Status.PipelineStatus = pr.Status.Conditions[0].Reason
+			msg := "PipelineRun " + pr.Name + " in namespace " + pr.Namespace + " is with status: " + pr.Status.Conditions[0].Reason
+			r.recorder.Event(&pt, core.EventTypeNormal, "Info", msg)
+			ptErrStatus := r.Status().Update(ctx, &pt)
 			if ptErrStatus != nil {
 				log.Error(ptErrStatus, "Failed to update PipelineTrigger status")
 				return ctrl.Result{}, ptErrStatus
 			}
 			return ctrl.Result{Requeue: true}, nil
-		} else if pipelineTrigger.Status.PipelineStatus == "Succeeded" || pipelineTrigger.Status.PipelineStatus == "Completed" {
-
-			if err := r.Delete(ctx, foundPipelineRun); err != nil {
-				// if fail to delete the external dependency here, return with error
-				// so that it can be retried
-				return ctrl.Result{}, err
-			}
-
-			// remove our finalizer from the list and update it.
-			controllerutil.RemoveFinalizer(&pipelineTrigger, myFinalizerName)
-			pipelineTrigger.Status.LatestEvent = latestEvent
-			pipelineTrigger.Status.PipelineStatus = "SucceededAndRemoved"
-			r.Status().Update(ctx, &pipelineTrigger)
-			msg := "PipelineRun " + foundPipelineRun.Name + " in namespace " + foundPipelineRun.Namespace + " deleted. "
-			r.recorder.Event(&pipelineTrigger, core.EventTypeNormal, "Info", msg)
-			if err := r.Update(ctx, &pipelineTrigger); err != nil {
-				return ctrl.Result{}, err
-			}
-			return ctrl.Result{}, nil
-
 		}
 	}
-
 	return ctrl.Result{}, nil
-
 }
 
 /*
@@ -255,27 +288,10 @@ func (r *PipelineTriggerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &pipelinev1alpha1.PipelineTrigger{}, pipelineRunField, func(rawObj client.Object) []string {
 		// Extract the PipelineRun name from the PipelineTrigger Spec, if one is provided
 		pipelineTrigger := rawObj.(*pipelinev1alpha1.PipelineTrigger)
-		if pipelineTrigger.Name == "" {
+		if pipelineTrigger.Status.LatestPipelineRun == "" {
 			return nil
 		}
-		return []string{pipelineTrigger.Name}
-	}); err != nil {
-		return err
-	}
-
-	/*
-		The `pipelineField` field must be indexed by the manager, so that we will be able to lookup `PipelineTriggers` by a referenced `pipelineField` name.
-		This will allow for quickly answer the question:
-		- If pipelineField _x_ is updated, which PipelineTrigger are affected?
-	*/
-
-	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &pipelinev1alpha1.PipelineTrigger{}, pipelineField, func(rawObj client.Object) []string {
-		// Extract the Pipeline name from the PipelineTrigger Spec, if one is provided
-		pipelineTrigger := rawObj.(*pipelinev1alpha1.PipelineTrigger)
-		if pipelineTrigger.Spec.Pipeline.Name == "" {
-			return nil
-		}
-		return []string{pipelineTrigger.Spec.Pipeline.Name}
+		return []string{pipelineTrigger.Status.LatestPipelineRun}
 	}); err != nil {
 		return err
 	}
@@ -297,21 +313,16 @@ func (r *PipelineTriggerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(
 			&source.Kind{Type: &imagereflectorv1.ImagePolicy{}},
 			handler.EnqueueRequestsFromMapFunc(r.findObjectsForSource),
-			//builder.WithPredicates(predicate.ResourceVersionChangedPredicate{}),
+			builder.WithPredicates(predicate.ResourceVersionChangedPredicate{}),
 		).
 		Watches(
 			&source.Kind{Type: &sourcev1.GitRepository{}},
 			handler.EnqueueRequestsFromMapFunc(r.findObjectsForSource),
-			//builder.WithPredicates(predicate.ResourceVersionChangedPredicate{}),
+			builder.WithPredicates(SourceRevisionChangePredicate{}),
 		).
 		Watches(
 			&source.Kind{Type: &tektondevv1.PipelineRun{}},
 			handler.EnqueueRequestsFromMapFunc(r.findObjectsForPipelineRun),
-			//builder.WithPredicates(predicate.ResourceVersionChangedPredicate{}),
-		).
-		Watches(
-			&source.Kind{Type: &tektondevv1.Pipeline{}},
-			handler.EnqueueRequestsFromMapFunc(r.findObjectsForPipeline),
 			//builder.WithPredicates(predicate.ResourceVersionChangedPredicate{}),
 		).
 		Complete(r)

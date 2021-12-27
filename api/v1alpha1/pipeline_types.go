@@ -26,6 +26,9 @@ type Pipeline struct {
 
 	// +required
 	Workspace Workspace `json:"workspace,omitempty"`
+
+	// +required
+	MaxHistory int64 `json:"maxHistory,omitempty"`
 }
 
 func (pipeline Pipeline) CreatePipelineRef() *tektondevv1.PipelineRef {
@@ -55,10 +58,10 @@ func (pipeline Pipeline) CreatePipelineRun(ctx context.Context, req ctrl.Request
 	}
 
 	pipelineRunTypeMeta := meta.TypeMeta("PipelineRun", "tekton.dev/v1beta1")
-	//pipelineRunName := pipelineTrigger.Name + "-" + generateRandomString(4, "abcdefghijklmnopqrstuvwxyz")
+	pipelineRunName := pipelineTrigger.Name + "-" + generateRandomString(4, "abcdefghijklmnopqrstuvwxyz")
 	pr := &tektondevv1.PipelineRun{
 		TypeMeta:   pipelineRunTypeMeta,
-		ObjectMeta: meta.ObjectMeta(meta.NamespacedName(pipelineTrigger.Namespace, pipelineTrigger.Name)),
+		ObjectMeta: meta.ObjectMeta(meta.NamespacedName(pipelineTrigger.Namespace, pipelineRunName)),
 		Spec: tektondevv1.PipelineRunSpec{
 			ServiceAccountName: pipeline.SericeAccountName,
 			PipelineRef:        pipeline.CreatePipelineRef(),

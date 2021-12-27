@@ -47,15 +47,9 @@ type PipelineTriggerSpec struct {
 
 // PipelineTriggerStatus defines the observed state of PipelineTrigger
 type PipelineTriggerStatus struct {
-	// LatestImage gives the first in the list of images scanned by
-	// the image repository, when filtered and ordered according to
-	// the policy.
-	LatestImage string `json:"latestImage,omitempty"`
-	// +optional
-
-	LatestRevision string `json:"latestRevision,omitempty"`
-
 	LatestEvent string `json:"latestEvent,omitempty"`
+
+	LatestPipelineRun string `json:"latestPipelineRun,omitempty"`
 
 	// PipelineStatus gives the status of the
 	// tekton pipeline currently running.

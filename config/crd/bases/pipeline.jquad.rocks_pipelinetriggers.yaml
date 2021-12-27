@@ -51,6 +51,9 @@ spec:
                       - value
                       type: object
                     type: array
+                  maxHistory:
+                    format: int64
+                    type: integer
                   name:
                     type: string
                   serviceAccountName:
@@ -92,12 +95,7 @@ spec:
             properties:
               latestEvent:
                 type: string
-              latestImage:
-                description: LatestImage gives the first in the list of images scanned
-                  by the image repository, when filtered and ordered according to
-                  the policy.
-                type: string
-              latestRevision:
+              latestPipelineRun:
                 type: string
               pipelineReason:
                 description: PipelineReason gives the reason of the tekton pipeline

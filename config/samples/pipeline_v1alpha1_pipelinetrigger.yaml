@@ -9,6 +9,7 @@ spec:
     name: app1
   pipeline: 
     name: build-and-push-base-image
+    maxHistory: 3
     workspace:
       name: workspace
       size: 1Gi
@@ -45,6 +46,7 @@ spec:
     name: app1
   pipeline: 
     name: build-and-push-base-image
+    maxHistory: 3
     workspace:
       name: workspace
       size: 1Gi
