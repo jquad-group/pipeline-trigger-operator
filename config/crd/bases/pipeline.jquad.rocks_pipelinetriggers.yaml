@@ -56,6 +56,9 @@ spec:
                     type: integer
                   name:
                     type: string
+                  retries:
+                    format: int64
+                    type: integer
                   serviceAccountName:
                     type: string
                   workspace:
@@ -93,6 +96,9 @@ spec:
           status:
             description: PipelineTriggerStatus defines the observed state of PipelineTrigger
             properties:
+              currentPipelineRetry:
+                format: int64
+                type: integer
               latestEvent:
                 type: string
               latestPipelineRun:

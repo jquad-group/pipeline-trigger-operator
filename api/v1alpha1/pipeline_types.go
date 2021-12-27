@@ -28,6 +28,9 @@ type Pipeline struct {
 	Workspace Workspace `json:"workspace,omitempty"`
 
 	// +required
+	Retries int64 `json:"retries,omitempty"`
+
+	// +required
 	MaxHistory int64 `json:"maxHistory,omitempty"`
 }
 

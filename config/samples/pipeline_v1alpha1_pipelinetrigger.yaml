@@ -10,6 +10,7 @@ spec:
   pipeline: 
     name: build-and-push-base-image
     maxHistory: 3
+    retries: 2 # if the first pipeline fails, retry another 2 times
     workspace:
       name: workspace
       size: 1Gi
@@ -47,6 +48,7 @@ spec:
   pipeline: 
     name: build-and-push-base-image
     maxHistory: 3
+    retries: 2
     workspace:
       name: workspace
       size: 1Gi

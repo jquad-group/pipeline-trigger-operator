@@ -149,8 +149,8 @@ func (r *PipelineTriggerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	if latestEvent != pipelineTrigger.Status.LatestEvent {
 		newVersionMsg := "Source " + pipelineTrigger.Spec.Source.Name + " in namespace " + pipelineTrigger.Namespace + " got new event " + latestEvent
 		r.recorder.Event(&pipelineTrigger, core.EventTypeNormal, "Info", newVersionMsg)
-		pipelineTrigger.Status.LatestPipelineRun = ""
-		pipelineTrigger.Status.PipelineStatus = ""
+		pipelineTrigger.Status.LatestPipelineRun = "Unknown"
+		pipelineTrigger.Status.PipelineStatus = "Unknown"
 		r.Status().Update(ctx, &pipelineTrigger)
 
 		// check if a pipelinerun already exists, if not create a new one,
@@ -158,17 +158,7 @@ func (r *PipelineTriggerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		err = r.Get(ctx, types.NamespacedName{Name: pipelineTrigger.Status.LatestPipelineRun, Namespace: pipelineTrigger.Namespace}, foundPipelineRun)
 		if err != nil && errors.IsNotFound(err) {
 			pr, pipelineRunError := pipelineTrigger.Spec.Pipeline.CreatePipelineRun(ctx, req, pipelineTrigger)
-			//labelShouldBePresent := pr.Labels[pipelineRunLabelLatestEvent] == "true"
-			//if labelShouldBePresent {
-			// If the label should be set but is not, set it.
-			//if pr.Labels == nil {
-			pr.Labels = make(map[string]string)
-			//}
-			pr.Labels[pipelineRunLabelLatestEvent] = latestEvent
-			//}
-			r.Update(ctx, pr)
 			pipelineTrigger.Status.LatestPipelineRun = pr.Name
-			foundPipelineRun = pr
 			pipelineTrigger.Status.LatestEvent = latestEvent
 			r.Status().Update(ctx, &pipelineTrigger)
 			ctrl.SetControllerReference(&pipelineTrigger, pr, r.Scheme)
@@ -187,13 +177,31 @@ func (r *PipelineTriggerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	}
 
 	if (pipelineTrigger.Status.PipelineStatus != "Completed") && (pipelineTrigger.Status.PipelineStatus == "Succeeded") {
-		//pipelineTrigger.Status.LatestEvent = latestEvent
-		//r.Status().Update(ctx, &pipelineTrigger)
+		pipelineTrigger.Status.CurrentPipelineRetry = 0
+		r.Status().Update(ctx, &pipelineTrigger)
 		return ctrl.Result{}, nil
 	} else if (pipelineTrigger.Status.PipelineStatus == "Completed") && (pipelineTrigger.Status.PipelineStatus != "Succeeded") {
-		//pipelineTrigger.Status.LatestEvent = latestEvent
-		//r.Status().Update(ctx, &pipelineTrigger)
+		pipelineTrigger.Status.CurrentPipelineRetry = 0
+		r.Status().Update(ctx, &pipelineTrigger)
 		return ctrl.Result{}, nil
+	} else if pipelineTrigger.Status.PipelineStatus == "Failed" {
+		if pipelineTrigger.Status.CurrentPipelineRetry < pipelineTrigger.Spec.Pipeline.Retries {
+			pipelineTrigger.Status.CurrentPipelineRetry++
+			pipelineTrigger.Status.PipelineStatus = "Unknown"
+			pr, pipelineRunError := pipelineTrigger.Spec.Pipeline.CreatePipelineRun(ctx, req, pipelineTrigger)
+			pipelineTrigger.Status.LatestPipelineRun = pr.Name
+			r.Status().Update(ctx, &pipelineTrigger)
+			ctrl.SetControllerReference(&pipelineTrigger, pr, r.Scheme)
+			if pipelineRunError != nil {
+				log.Error(err, "Failed to create new PipelineRun", "PipelineTrigger.Namespace", pipelineTrigger.Namespace, "PipelineTrigger.Name", pipelineTrigger.Name)
+				return ctrl.Result{}, err
+			}
+			newPipelineRunMsg := "PipelineRun " + pr.Name + " in namespace " + pr.Namespace + " created. "
+			r.recorder.Event(&pipelineTrigger, core.EventTypeNormal, "Info", newPipelineRunMsg)
+			return ctrl.Result{Requeue: true}, nil
+		} else {
+			return ctrl.Result{}, nil
+		}
 	} else {
 		foundPipelineRun := &tektondevv1.PipelineRun{}
 		err = r.Get(ctx, types.NamespacedName{Name: pipelineTrigger.Status.LatestPipelineRun, Namespace: pipelineTrigger.Namespace}, foundPipelineRun)

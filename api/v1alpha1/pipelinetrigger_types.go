@@ -56,6 +56,8 @@ type PipelineTriggerStatus struct {
 	PipelineStatus string `json:"pipelineStatus,omitempty"`
 	// +optional
 
+	CurrentPipelineRetry int64 `json:"currentPipelineRetry,omitempty"`
+
 	// PipelineReason gives the reason of the
 	// tekton pipeline currently running.
 	PipelineReason string `json:"pipelineReason,omitempty"`
