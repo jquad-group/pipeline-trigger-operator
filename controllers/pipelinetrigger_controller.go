@@ -19,8 +19,6 @@ package controllers
 import (
 	"context"
 
-	//"errors"
-
 	core "k8s.io/api/core/v1"
 
 	"github.com/go-logr/logr"
@@ -73,7 +71,7 @@ type Tekton struct {
 /*
 There are two additional resources that the controller needs to have access to, other than PipelineTriggers.
 - It needs to be able to fully manage Tekton PipelineRuns, as well as check their status.
-- It also needs to be able to get, list and watch ImagePolicies.
+- It also needs to be able to get, list and watch ImagePolicies and GitRepositories.
 */
 
 //+kubebuilder:rbac:groups=jquad.rocks.pipeline,resources=pipelinetriggers,verbs=get;list;watch;create;update;patch;delete
@@ -89,15 +87,9 @@ There are two additional resources that the controller needs to have access to, 
 
 /*
 `Reconcile` will be in charge of reconciling the state of PipelineTriggers.
-PipelineTriggers are used to manage Tekton PipelineRuns whose pods are started whenever the imagePolicy defined in the PipelineRun is updated.
-For that reason we need to add an annotation to the PodTemplate within the Tekton PipelineRun we create.
-This annotation will keep track of the latest version of the base image used for the build process.
-Therefore when the imagePolicy detects new base image version, the PodTemplate in the Tekton PipelineRun will change.
-This will start new Tekton PipelineRun.
-Skip down to the `SetupWithManager` function to see how we ensure that `Reconcile` is called when the referenced `ImagePolicies` are updated.
+PipelineTriggers are used to manage PipelineRuns whose pods are started whenever the Source defined in the PipelineTrigger is updated.
+When the Source detects new version, a new Tekton PipelineRun starts
 */
-// Reconcile is part of the main kubernetes reconciliation loop which aims to
-// move the current state of the cluster closer to the desired state.
 func (r *PipelineTriggerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 
 	log := log.FromContext(ctx)
@@ -113,6 +105,7 @@ func (r *PipelineTriggerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 	var err error
 	var latestEvent string
+	// Check if Source is from Kind ImagePolicy or GitRepository
 	if pipelineTrigger.Spec.Source.Kind == "ImagePolicy" {
 		foundSource := &imagereflectorv1.ImagePolicy{}
 		err = r.Get(ctx, types.NamespacedName{Name: pipelineTrigger.Spec.Source.Name, Namespace: pipelineTrigger.Namespace}, foundSource)
@@ -125,15 +118,16 @@ func (r *PipelineTriggerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, err
 	}
 
+	// Check if the Source resource exists
 	if err != nil {
 		// If a Source name is provided, then it must exist
 		// Create an Event for the user to understand why their reconcile is failing.
 		errorMsg := "Source " + pipelineTrigger.Spec.Source.Name + " in namespace " + pipelineTrigger.Namespace + "cannot be found."
 		r.recorder.Event(&pipelineTrigger, core.EventTypeWarning, "Error", errorMsg)
 		return ctrl.Result{}, err
-
 	}
 
+	// check if the referenced tekton pipeline exists
 	foundTektonPipeline := &tektondevv1.Pipeline{}
 	err = r.Get(ctx, types.NamespacedName{Name: pipelineTrigger.Spec.Pipeline.Name, Namespace: pipelineTrigger.Namespace}, foundTektonPipeline)
 	if err != nil {
@@ -146,6 +140,7 @@ func (r *PipelineTriggerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, err
 	}
 
+	// check if there is a new event
 	if latestEvent != pipelineTrigger.Status.LatestEvent {
 		newVersionMsg := "Source " + pipelineTrigger.Spec.Source.Name + " in namespace " + pipelineTrigger.Namespace + " got new event " + latestEvent
 		r.recorder.Event(&pipelineTrigger, core.EventTypeNormal, "Info", newVersionMsg)
@@ -153,22 +148,36 @@ func (r *PipelineTriggerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		pipelineTrigger.Status.PipelineStatus = "Unknown"
 		r.Status().Update(ctx, &pipelineTrigger)
 
-		// check if a pipelinerun already exists, if not create a new one,
+		// check if a pipelinerun already exists, if not create a new one
 		foundPipelineRun := &tektondevv1.PipelineRun{}
 		err = r.Get(ctx, types.NamespacedName{Name: pipelineTrigger.Status.LatestPipelineRun, Namespace: pipelineTrigger.Namespace}, foundPipelineRun)
 		if err != nil && errors.IsNotFound(err) {
-			pr, pipelineRunError := pipelineTrigger.Spec.Pipeline.CreatePipelineRun(ctx, req, pipelineTrigger)
-			pipelineTrigger.Status.LatestPipelineRun = pr.Name
-			pipelineTrigger.Status.LatestEvent = latestEvent
-			r.Status().Update(ctx, &pipelineTrigger)
-			ctrl.SetControllerReference(&pipelineTrigger, pr, r.Scheme)
-			if pipelineRunError != nil {
-				log.Error(err, "Failed to create new PipelineRun", "PipelineTrigger.Namespace", pipelineTrigger.Namespace, "PipelineTrigger.Name", pipelineTrigger.Name)
-				return ctrl.Result{}, err
+			pipelineRunList := &tektondevv1.PipelineRunList{}
+			pipelineRunListOpts := []client.ListOption{
+				client.InNamespace(pipelineTrigger.Namespace),
+				client.MatchingLabels{"pipeline.jquad.rocks/pipelinetrigger": pipelineTrigger.Name},
 			}
-			newPipelineRunMsg := "PipelineRun " + pr.Name + " in namespace " + pr.Namespace + " created. "
-			r.recorder.Event(&pipelineTrigger, core.EventTypeNormal, "Info", newPipelineRunMsg)
-			return ctrl.Result{Requeue: true}, nil
+			r.List(ctx, pipelineRunList, pipelineRunListOpts...)
+			// if pipelineruns nr < MaxHistory, just create a new pipelinerun
+			if len(pipelineRunList.Items) < int(pipelineTrigger.Spec.Pipeline.MaxHistory) {
+				pr, pipelineRunError := pipelineTrigger.Spec.Pipeline.CreatePipelineRun(ctx, req, pipelineTrigger)
+				pipelineTrigger.Status.LatestPipelineRun = pr.Name
+				pipelineTrigger.Status.LatestEvent = latestEvent
+				r.Status().Update(ctx, &pipelineTrigger)
+				ctrl.SetControllerReference(&pipelineTrigger, pr, r.Scheme)
+				if pipelineRunError != nil {
+					log.Error(err, "Failed to create new PipelineRun", "PipelineTrigger.Namespace", pipelineTrigger.Namespace, "PipelineTrigger.Name", pipelineTrigger.Name)
+					return ctrl.Result{}, err
+				}
+				newPipelineRunMsg := "PipelineRun " + pr.Name + " in namespace " + pr.Namespace + " created. "
+				r.recorder.Event(&pipelineTrigger, core.EventTypeNormal, "Info", newPipelineRunMsg)
+				return ctrl.Result{Requeue: true}, nil
+			} else {
+				// if pipelineruns > MaxHistory delete one pipelinerun, return and requeue
+				deletePipelineRun := &pipelineRunList.Items[0]
+				r.Delete(ctx, deletePipelineRun, client.GracePeriodSeconds(5))
+				return ctrl.Result{Requeue: true}, nil
+			}
 		} else if err != nil {
 			log.Error(err, "Failed to get PipelineRun")
 			return ctrl.Result{}, err
@@ -208,31 +217,6 @@ func (r *PipelineTriggerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		r.reconcilePipelineRun(ctx, foundPipelineRun, pipelineTrigger)
 	}
 
-	/*
-			else if pipelineTrigger.Status.PipelineStatus == "Succeeded" || pipelineTrigger.Status.PipelineStatus == "Completed" {
-
-				if err := r.Delete(ctx, foundPipelineRun); err != nil {
-					// if fail to delete the external dependency here, return with error
-					// so that it can be retried
-					return ctrl.Result{}, err
-
-
-
-				// remove our finalizer from the list and update it.
-				controllerutil.RemoveFinalizer(&pipelineTrigger, myFinalizerName)
-				pipelineTrigger.Status.LatestEvent = latestEvent
-				pipelineTrigger.Status.PipelineStatus = "SucceededAndRemoved"
-				r.Status().Update(ctx, &pipelineTrigger)
-				msg := "PipelineRun " + foundPipelineRun.Name + " in namespace " + foundPipelineRun.Namespace + " deleted. "
-				r.recorder.Event(&pipelineTrigger, core.EventTypeNormal, "Info", msg)
-				if err := r.Update(ctx, &pipelineTrigger); err != nil {
-					return ctrl.Result{}, err
-				}
-				return ctrl.Result{}, nil
-
-			}
-		}
-	*/
 	return ctrl.Result{}, nil
 
 }
@@ -257,10 +241,9 @@ func (r *PipelineTriggerReconciler) reconcilePipelineRun(ctx context.Context, pr
 }
 
 /*
-Finally, we add this reconciler to the manager, so that it gets started
-when the manager is started.
+Finally, we add this reconciler to the manager, so that it gets started when the manager is started.
 Since we create dependency Tekton PipelineRuns during the reconcile, we can specify that the controller `Owns` Tekton PipelineRun.
-However the ImagePolicies that we want to watch are not owned by the PipelineRun object.
+However the ImagePolicies and GitRepositories that we want to watch are not owned by the PipelineRun object.
 Therefore we must specify a custom way of watching those objects.
 This watch logic is complex, so we have split it into a separate method.
 */
@@ -306,13 +289,13 @@ func (r *PipelineTriggerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	/*
 		The controller will first register the Type that it manages, as well as the types of subresources that it controls.
-		Since we also want to watch ImagePolicies that are not controlled or managed by the controller, we will need to use the `Watches()` functionality as well.
+		Since we also want to watch ImagePolicies and GitRepositories that are not controlled or managed by the controller, we will need to use the `Watches()` functionality as well.
 		The `Watches()` function is a controller-runtime API that takes:
-		- A Kind (i.e. `ImagePolicy`)
-		- A mapping function that converts a `ImagePolicy` object to a list of reconcile requests for `PipelineTriggers`.
+		- A Kind (i.e. `ImagePolicy, GitRepository`)
+		- A mapping function that converts a `ImagePolicy,GitRepository` object to a list of reconcile requests for `PipelineTriggers`.
 		We have separated this out into a separate function.
-		- A list of options for watching the `ImagePolicies`
-		  - In our case, we only want the watch to be triggered when the LatestImage of the ImagePolicy is changed.
+		- A list of options for watching the `ImagePolicies,GitRepositories`
+		  - In our case, we only want the watch to be triggered when the LatestImage or LatestRevisioin of the ImagePolicy or GitRepository is changed.
 	*/
 
 	return ctrl.NewControllerManagedBy(mgr).
@@ -422,10 +405,4 @@ func containsString(slice []string, s string) bool {
 		}
 	}
 	return false
-}
-
-// labelsForPipelineRun returns the labels for selecting the resources
-// belonging to the given PipelineTrigger CR name.
-func labelsForPipelineRun(name string) map[string]string {
-	return map[string]string{"owner_by": "pipeline-trigger-operator", "belongs_to": name}
 }

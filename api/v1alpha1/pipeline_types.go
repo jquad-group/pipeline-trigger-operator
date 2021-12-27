@@ -63,8 +63,13 @@ func (pipeline Pipeline) CreatePipelineRun(ctx context.Context, req ctrl.Request
 	pipelineRunTypeMeta := meta.TypeMeta("PipelineRun", "tekton.dev/v1beta1")
 	pipelineRunName := pipelineTrigger.Name + "-" + generateRandomString(4, "abcdefghijklmnopqrstuvwxyz")
 	pr := &tektondevv1.PipelineRun{
-		TypeMeta:   pipelineRunTypeMeta,
-		ObjectMeta: meta.ObjectMeta(meta.NamespacedName(pipelineTrigger.Namespace, pipelineRunName)),
+		TypeMeta: pipelineRunTypeMeta,
+		//		ObjectMeta: meta.ObjectMeta(meta.NamespacedName(pipelineTrigger.Namespace, pipelineRunName)),
+		ObjectMeta: v1.ObjectMeta{
+			Name:      pipelineRunName,
+			Namespace: pipelineTrigger.Namespace,
+			Labels:    setLabel(pipelineTrigger.Name),
+		},
 		Spec: tektondevv1.PipelineRunSpec{
 			ServiceAccountName: pipeline.SericeAccountName,
 			PipelineRef:        pipeline.CreatePipelineRef(),
@@ -89,4 +94,8 @@ func generateRandomString(length int, charset string) string {
 		b[i] = charset[seededRand.Intn(len(charset))]
 	}
 	return string(b)
+}
+
+func setLabel(name string) map[string]string {
+	return map[string]string{"pipeline.jquad.rocks/pipelinetrigger": name}
 }

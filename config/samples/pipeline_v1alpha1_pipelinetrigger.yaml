@@ -9,7 +9,8 @@ spec:
     name: app1
   pipeline: 
     name: build-and-push-base-image
-    maxHistory: 3
+    serviceAccountName: default
+    maxHistory: 1
     retries: 2 # if the first pipeline fails, retry another 2 times
     workspace:
       name: workspace
@@ -47,8 +48,9 @@ spec:
     name: app1
   pipeline: 
     name: build-and-push-base-image
+    serviceAccountName: default
     maxHistory: 3
-    retries: 2
+    retries: 2 # if the first pipeline fails, retry another 2 times
     workspace:
       name: workspace
       size: 1Gi
