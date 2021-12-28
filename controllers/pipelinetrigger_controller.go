@@ -74,9 +74,9 @@ There are two additional resources that the controller needs to have access to, 
 - It also needs to be able to get, list and watch ImagePolicies and GitRepositories.
 */
 
-//+kubebuilder:rbac:groups=jquad.rocks.pipeline,resources=pipelinetriggers,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=jquad.rocks.pipeline,resources=pipelinetriggers/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=jquad.rocks.pipeline,resources=pipelinetriggers/finalizers,verbs=update
+//+kubebuilder:rbac:groups=pipeline.jquad.rocks,resources=pipelinetriggers,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=pipeline.jquad.rocks,resources=pipelinetriggers/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=pipeline.jquad.rocks,resources=pipelinetriggers/finalizers,verbs=update
 //+kubebuilder:rbac:groups=image.toolkit.fluxcd.io,resources=imagepolicies,verbs=get;list;watch
 //+kubebuilder:rbac:groups=image.toolkit.fluxcd.io,resources=imagepolicies/status,verbs=get;list;watch
 //+kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=gitrepositories,verbs=get;list;watch
