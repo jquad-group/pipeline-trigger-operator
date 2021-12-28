@@ -1,32 +1,26 @@
 # Pipeline Trigger Operator
 
-The Pipeline Trigger Operator listens for events from the Flux v2 `ImagePolicy` resource and creates a Tekton `PipelineRun` from a given `Pipeline` resouce.
+The Pipeline Trigger Operator listens for events from the Flux v2 `ImagePolicy` and `GitRepository` resources and creates a Tekton `PipelineRun` for a given `Pipeline` resouce.
 
-The `PipelineRun` is automatically deleted if successful. 
+# Installation
 
-# Deployment
-
-`git clone https://github.com/jquad-group/pipeline-trigger-operator.git`
-
-`cd config/default`
+Clone the project and from directory `config/default` run:
 
 `kustomize build . | kubectl apply -f -`
 
-# Examples
+The operator is installed in the `pipeline-trigger-operator-system` namespace. 
 
-`config/samples`
+# Usage
+
+Examples can be found in the `config/samples` directory of the project. 
 
 # Development
 
-`git clone https://github.com/jquad-group/pipeline-trigger-operator.git`
+The project is built with: `make`
 
-`make`
+If API source files are changed, the command `make manifests` needs to be run. 
 
-`make manifests` 
-
-`docker build . --tag harbor.jquad.rocks/library/pipeline-trigger-operator:v0.0.1`
-
-`docker push harbor.jquad.rocks/library/pipeline-trigger-operator:v0.0.1`
+Build the container image using `docker build . --tag harbor.jquad.rocks/library/pipeline-trigger-operator:v0.0.1`
 
 
 
