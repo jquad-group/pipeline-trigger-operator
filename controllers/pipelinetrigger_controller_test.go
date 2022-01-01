@@ -6,7 +6,9 @@ import (
 
 	imagereflectorv1 "github.com/fluxcd/image-reflector-controller/api/v1beta1"
 	pipelinev1alpha1 "github.com/jquad-group/pipeline-trigger-operator/api/v1alpha1"
+	tektondevv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -76,6 +78,9 @@ var _ = Describe("PipelineTrigger controller", func() {
 				},
 			}
 			Expect(k8sClient.Create(ctx, pipelineTrigger)).Should(Succeed())
+			foundPipelineRun := &tektondevv1.PipelineRun{}
+			k8sClient.Get(ctx, types.NamespacedName{Namespace: pipelineTrigger.Namespace}, foundPipelineRun)
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: pipelineTrigger.Namespace}, foundPipelineRun)).ShouldNot(Succeed())
 		})
 	})
 })

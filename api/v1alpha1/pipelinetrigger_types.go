@@ -62,6 +62,20 @@ type PipelineTriggerStatus struct {
 	// tekton pipeline currently running.
 	PipelineReason string `json:"pipelineReason,omitempty"`
 	// +optional
+
+	// +patchMergeKey=type
+	// +patchStrategy=merge
+	// +listType=map
+	// +listMapKey=type
+	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
+}
+
+func (m *PipelineTrigger) GetConditions() []metav1.Condition {
+	return m.Status.Conditions
+}
+
+func (m *PipelineTrigger) SetConditions(conditions []metav1.Condition) {
+	m.Status.Conditions = conditions
 }
 
 //+kubebuilder:object:root=true
