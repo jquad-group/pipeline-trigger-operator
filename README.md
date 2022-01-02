@@ -24,7 +24,8 @@ Build the container image using `docker build . --tag harbor.jquad.rocks/library
 
 # Example 1: Listen to updates from a Flux v2 image policy
 
-´´´
+```
+
 apiVersion: pipeline.jquad.rocks/v1alpha1
 kind: PipelineTrigger
 metadata:
@@ -48,7 +49,8 @@ spec:
         value: "git@github.com:jquad-group/www-jquad.git"
       - name: "branch-name"
         value: "main"
-´´´
+
+```
 
 
 
