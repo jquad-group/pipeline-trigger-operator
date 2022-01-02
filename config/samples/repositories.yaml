@@ -1,7 +1,7 @@
 apiVersion: source.toolkit.fluxcd.io/v1beta1
 kind: GitRepository
 metadata:
-  name: app1
+  name: microservice-code-repo
   namespace: pipeline-trigger-operator-system
 spec:
   interval: 1m
@@ -12,7 +12,7 @@ spec:
 apiVersion: image.toolkit.fluxcd.io/v1beta1
 kind: ImageRepository
 metadata:
-  name: app1
+  name: microsevice-container-repo 
   namespace: pipeline-trigger-operator-system
 spec:
   interval: 5m
