@@ -2,11 +2,11 @@ apiVersion: image.toolkit.fluxcd.io/v1beta1
 kind: ImagePolicy
 metadata:
   name: latest-image-notifier
-  namespace: pipeline-trigger-operator-system
+  namespace: jq-example-namespace
 spec:
   imageRepositoryRef:
     name: microservice-container-repo
-    namespace: pipeline-trigger-operator-system
+    namespace: jq-example-namespace
   policy:
     semver:
       range: 0.0.x

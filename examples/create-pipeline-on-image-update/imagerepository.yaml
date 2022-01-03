@@ -1,0 +1,8 @@
+apiVersion: image.toolkit.fluxcd.io/v1beta1
+kind: ImageRepository
+metadata:
+  name: microservice-container-repo 
+  namespace: jq-example-namespace
+spec:
+  interval: 1m
+  image: docker.io/org/image

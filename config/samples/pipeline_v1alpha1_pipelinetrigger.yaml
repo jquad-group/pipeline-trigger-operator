@@ -1,14 +1,14 @@
 apiVersion: pipeline.jquad.rocks/v1alpha1
 kind: PipelineTrigger
 metadata:
-  name: pipelinetrigger-sample-git
-  namespace: pipeline-trigger-operator-system
+  name: pipelinetrigger-for-git
+  namespace: ly-operator-try
 spec:
   source: 
     kind: GitRepository
-    name: app1
+    name: microservice-code-repo
   pipeline: 
-    name: build-and-push-base-image
+    name: ly-build-and-push-try
     serviceAccountName: default
     maxHistory: 5
     retries: 2 # if the first pipeline fails, retry another 2 times
@@ -40,14 +40,14 @@ spec:
 apiVersion: pipeline.jquad.rocks/v1alpha1
 kind: PipelineTrigger
 metadata:
-  name: pipelinetrigger-sample-image
-  namespace: pipeline-trigger-operator-system
+  name: pipelinetrigger-for-image
+  namespace: ly-operator-try
 spec:
   source: 
     kind: ImagePolicy
-    name: app1
+    name: latest-image-notifier
   pipeline: 
-    name: build-and-push-base-image
+    name: ly-build-and-push-try
     serviceAccountName: default
     maxHistory: 3
     retries: 2 # if the first pipeline fails, retry another 2 times
