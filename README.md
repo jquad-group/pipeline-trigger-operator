@@ -1,4 +1,8 @@
-**Automated creation of Tekton pipelineruns on events from Flux resources**
+# Pipeline Trigger Operator
+
+The Pipeline Trigger Operator listens for events from the Flux v2 `ImagePolicy` or `GitRepository` resources and creates a Tekton `PipelineRun` for a given `Pipeline` resouce.
+
+**Automated creation of Tekton PipelineRuns on events from Flux resources**
 
 Using the automated pipeline trigger operator is based on the following resources:
 1. `GitRepository` - [**Flux** resource](https://fluxcd.io/docs/components/source/gitrepositories/), configure as required
@@ -6,14 +10,12 @@ Using the automated pipeline trigger operator is based on the following resource
 3. `ImagePolicy` - [**Flux** resource](https://fluxcd.io/docs/components/image/imagepolicies/), configure as required
 4. `Pipeline` - [**Tekton** resource](https://tekton.dev/docs/pipelines/pipelines/), configure as required
 ```diff
-5. `PipelineTrigger` - **JQuad** resource, configurtaion descrption in this readme
+5. `PipelineTrigger` - **JQuad** resource, configuration description in this readme
 ```
 
-# Pipeline Trigger Operator
+![Workflow](https://raw.githubusercontent.com/jquad-group/pipeline-trigger-operator/main/img/pipeline-trigger-operator.svg)
 
-The Pipeline Trigger Operator listens for events from the Flux v2 `ImagePolicy` or `GitRepository` resources and creates a Tekton `PipelineRun` for a given `Pipeline` resouce.
-
-# `PipelineTrigger` Specification
+# PipelineTrigger Specification
 
 ```
 apiVersion: pipeline.jquad.rocks/v1alpha1
@@ -42,7 +44,7 @@ spec:
       name: workspace
       size: 1Gi
       accessMode: ReadWriteOnce
-    # The specific input parameters for the pipeline that is used for the creation of the pipelinerun 
+    # The specific input parameters for the pipeline that is used for the creation of the PipelineRun 
     inputParams:
       - name: "repo-url"
         value: "https://github.com/my-project.git"
