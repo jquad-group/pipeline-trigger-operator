@@ -13,7 +13,7 @@ Using the automated pipeline trigger operator is based on the following resource
 5. `PipelineTrigger` - **JQuad** resource, configuration description in this readme
 ```
 
-![Workflow](https://raw.githubusercontent.com/jquad-group/pipeline-trigger-operator/main/img/pipeline-trigger-operator.svg)
+![Workflow](https://github.com/jquad-group/pipeline-trigger-operator/blob/main/img/pipeline-trigger-operator.svg)
 
 # PipelineTrigger Specification
 
