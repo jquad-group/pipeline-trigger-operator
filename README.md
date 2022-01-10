@@ -54,9 +54,9 @@ spec:
 
 # Installation
 
-Clone the project and from directory `config/default` run:
+Run the following command: 
 
-`kustomize build . | kubectl apply -f -`
+`kubectl apply -f https://github.com/jquad-group/pipeline-trigger-operator/releases/download/v0.1.2/release.yaml`
 
 The operator is installed in the `pipeline-trigger-operator-system` namespace. 
 
@@ -65,14 +65,6 @@ After the installation of the operator, the `PipelineTrigger` resource is added 
 # Usage
 
 Examples can be found in the `examples` directory of the project. 
-
-# Development
-
-The project is built with: `make`
-
-If API source files are changed, the command `make manifests` needs to be run. 
-
-Build the container image using `docker build . --tag pipeline-trigger-operator`
 
 # Example 1: Listen to updates from a Flux v2 image policy
 
@@ -138,5 +130,20 @@ spec:
         value: "main"
 ```
 
+# Development / Contribution
 
+## Build and run locally 
 
+In order to build the project, run `make`.
+
+If the API source files are changed, the command `make manifests` needs to be run.
+
+Run the project locally by `make deploy`.
+
+## Build the container image 
+
+Build the container image using `docker build . --tag pipeline-trigger-operator` (implicitly builds the operator)
+
+Build and deploy the changed version by running the following command from the `config/default` directory:
+
+`kustomize build . | kubectl apply -f -` 
