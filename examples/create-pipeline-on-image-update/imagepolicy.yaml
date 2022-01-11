@@ -5,8 +5,8 @@ metadata:
   namespace: jq-example-namespace
 spec:
   imageRepositoryRef:
-    name: microservice-container-repo
+    name: base-image-container-repo
     namespace: jq-example-namespace
   policy:
     semver:
-      range: 0.0.x
+      range: v0.0.x

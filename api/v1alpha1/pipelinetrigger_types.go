@@ -36,29 +36,24 @@ type PipelineTrigger struct {
 // PipelineTriggerSpec defines the desired state of PipelineTrigger
 type PipelineTriggerSpec struct {
 	// Source points at the object specifying the Image Policy or Git Repository found
-	// +required
+	// +kubebuilder:validation:Required
 	Source Source `json:"source"`
 
 	// Pipeline points at the object specifying the tekton pipeline
-	// +required
+	// +kubebuilder:validation:Required
 	Pipeline Pipeline `json:"pipeline"`
 }
 
 // PipelineTriggerStatus defines the observed state of PipelineTrigger
 type PipelineTriggerStatus struct {
+	// The event received from the Git Repository or Image Policy
 	LatestEvent string `json:"latestEvent,omitempty"`
 
+	// The name of the latest Pipeline Run resource for the received latest event
 	LatestPipelineRun string `json:"latestPipelineRun,omitempty"`
 
-	// PipelineStatus gives the status of the tekton pipeline currently running.
-	PipelineStatus string `json:"pipelineStatus,omitempty"`
-	// +optional
-
+	// The current Pipeline Run failed retry
 	CurrentPipelineRetry int64 `json:"currentPipelineRetry,omitempty"`
-
-	// PipelineReason gives the reason of the tekton pipeline currently running.
-	PipelineReason string `json:"pipelineReason,omitempty"`
-	// +optional
 
 	// +patchMergeKey=type
 	// +patchStrategy=merge

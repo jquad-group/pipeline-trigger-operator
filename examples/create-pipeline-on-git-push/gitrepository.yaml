@@ -5,6 +5,6 @@ metadata:
   namespace: jq-example-namespace
 spec:
   interval: 1m
-  url: https://github.com/my-project.git
+  url: https://github.com/jquad-group/microservice.git
   ref:
     branch: main

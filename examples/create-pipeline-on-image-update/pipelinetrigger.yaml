@@ -8,18 +8,18 @@ spec:
     kind: ImagePolicy
     name: latest-image-notifier
   pipeline: 
-    name: build-and-push-myproject-on-image-update
+    name: build-and-push-microservice-on-base-image-update
     serviceAccountName: default
-    maxHistory: 3
-    retries: 2 # if the first pipeline fails, retry another 2 times
+    maxHistory: 5
+    retries: 3 # if the first pipeline fails, retry another 2 times
     workspace:
       name: workspace
       size: 1Gi
       accessMode: ReadWriteOnce
     inputParams:
       - name: "repo-url"
-        value: "https://github.com/my-project.git"
+        value: "https://github.com/jquad-group/microservice.git"
       - name: "branch-name"
         value: "main"
       - name: "imageLocation"
-        value: "docker.io/org/image"
+        value: "ghcr.io/jquad-group/microservice"

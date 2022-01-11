@@ -98,6 +98,7 @@ spec:
                     minLength: 1
                     type: string
                 required:
+                - kind
                 - name
                 type: object
             required:
@@ -180,19 +181,15 @@ spec:
                 - type
                 x-kubernetes-list-type: map
               currentPipelineRetry:
+                description: The current Pipeline Run failed retry
                 format: int64
                 type: integer
               latestEvent:
+                description: The event received from the Git Repository or Image Policy
                 type: string
               latestPipelineRun:
-                type: string
-              pipelineReason:
-                description: PipelineReason gives the reason of the tekton pipeline
-                  currently running.
-                type: string
-              pipelineStatus:
-                description: PipelineStatus gives the status of the tekton pipeline
-                  currently running.
+                description: The name of the latest Pipeline Run resource for the
+                  received latest event
                 type: string
             type: object
         type: object

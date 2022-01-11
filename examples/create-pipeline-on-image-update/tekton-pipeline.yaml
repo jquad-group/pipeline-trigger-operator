@@ -33,7 +33,7 @@ spec:
 apiVersion: tekton.dev/v1beta1
 kind: Pipeline
 metadata:
-  name: build-and-push-myproject-on-image-update
+  name: build-and-push-microservice-on-base-image-update
   namespace: jq-example-namespace
 spec:
   workspaces:
