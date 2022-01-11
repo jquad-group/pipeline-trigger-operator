@@ -14,23 +14,27 @@ import (
 )
 
 type Pipeline struct {
-	// +required
-	Name string `json:"name,omitempty"`
+	// +kubebuilder:validation:Required
+	Name string `json:"name"`
 
-	// +required
-	SericeAccountName string `json:"serviceAccountName,omitempty"`
+	// +kubebuilder:validation:Required
+	SericeAccountName string `json:"serviceAccountName"`
 
-	// +required
-	InputParams []InputParam `json:"inputParams,omitempty"`
+	// +kubebuilder:validation:Required
+	InputParams []InputParam `json:"inputParams"`
 
-	// +required
-	Workspace Workspace `json:"workspace,omitempty"`
+	// +kubebuilder:validation:Required
+	Workspace Workspace `json:"workspace"`
 
-	// +required
-	Retries int64 `json:"retries,omitempty"`
+	// +kubebuilder:validation:Maximum=10
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Required
+	Retries int64 `json:"retries"`
 
-	// +required
-	MaxHistory int64 `json:"maxHistory,omitempty"`
+	// +kubebuilder:validation:Maximum=10
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Required
+	MaxHistory int64 `json:"maxHistory"`
 }
 
 func (pipeline Pipeline) CreatePipelineRef() *tektondevv1.PipelineRef {

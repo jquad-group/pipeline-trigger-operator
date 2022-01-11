@@ -35,8 +35,7 @@ type PipelineTrigger struct {
 
 // PipelineTriggerSpec defines the desired state of PipelineTrigger
 type PipelineTriggerSpec struct {
-	// Source points at the object specifying the Image Policy or Git Repository
-	// found
+	// Source points at the object specifying the Image Policy or Git Repository found
 	// +required
 	Source Source `json:"source"`
 
@@ -51,15 +50,13 @@ type PipelineTriggerStatus struct {
 
 	LatestPipelineRun string `json:"latestPipelineRun,omitempty"`
 
-	// PipelineStatus gives the status of the
-	// tekton pipeline currently running.
+	// PipelineStatus gives the status of the tekton pipeline currently running.
 	PipelineStatus string `json:"pipelineStatus,omitempty"`
 	// +optional
 
 	CurrentPipelineRetry int64 `json:"currentPipelineRetry,omitempty"`
 
-	// PipelineReason gives the reason of the
-	// tekton pipeline currently running.
+	// PipelineReason gives the reason of the tekton pipeline currently running.
 	PipelineReason string `json:"pipelineReason,omitempty"`
 	// +optional
 
