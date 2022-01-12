@@ -9,9 +9,7 @@ Using the automated pipeline trigger operator is based on the following resource
 2. `ImageRepository` - [**Flux** resource](https://fluxcd.io/docs/components/image/imagerepositories/), configure as required
 3. `ImagePolicy` - [**Flux** resource](https://fluxcd.io/docs/components/image/imagepolicies/), configure as required
 4. `Pipeline` - [**Tekton** resource](https://tekton.dev/docs/pipelines/pipelines/), configure as required
-```diff
-5. `PipelineTrigger` - **JQuad** resource, configuration description in this readme
-```
+5. `PipelineTrigger` - **PipelineTrigger* resource, configuration description in this readme
 
 ![Workflow](https://github.com/jquad-group/pipeline-trigger-operator/blob/main/img/pipeline-trigger-operator.svg)
 
@@ -66,69 +64,84 @@ After the installation of the operator, the `PipelineTrigger` resource is added 
 
 Examples can be found in the `examples` directory of the project. 
 
-# Example 1: Listen to updates from a Flux v2 image policy
+## Example 1: Build a microservice and create the microservice image on git push on the master branch 
 
-1. Deploy an `ImageRepository` (Flux) resource
+1. Create the example namespace `jq-example-namespace`. In this namespace are deployed all the examples: 
 
-```
-apiVersion: image.toolkit.fluxcd.io/v1beta1
-kind: ImageRepository
-metadata:
-  name: microservice-container-repo 
-  namespace: jq-example-namespace
-spec:
-  interval: 5m
-  image: <URL to the image>
-```
+ `kubectl create ns jq-example-namespace`
 
-2. Deploy an `ImagePolicy` (Flux) resource in order to select the latest image version
+2. Deploy the `gitrepository.yaml`. The `GitRepository` resource clones a branch for given git repository: 
 
 ```
-apiVersion: image.toolkit.fluxcd.io/v1beta1
-kind: ImagePolicy
-metadata:
-  name: latest-image-notifier
-  namespace: jq-example-namespace
-spec:
-  imageRepositoryRef:
-    name: microservice-container-repo
-    namespace: jq-example-namespace
-  policy:
-    semver:
-      range: 0.0.x
-
+$ kubectl apply -f examples/create-pipeline-on-git-push/gitrepository.yaml
+$ kubectl describe gitrepository microservice-code-repo -n jq-example-namespace
+Name:         microservice-code-repo
+Namespace:    jq-example-namespace
+...
+Events:
+  Type    Reason  Age   From               Message
+  ----    ------  ----  ----               -------
+  Normal  info    17s   source-controller  Fetched revision: main/03da4fdbf8f3e027fb56dd0d96244c951a24f2b4
 ```
 
-3. Deploy your tekton build pipeline
+3. Deploy the `tekton-pipelines.yaml`. This a dummy tekton pipeline, which is started when the `GitRepository` detects new commits: 
 
-4. Deploy the `PipelineTrigger` resource which creates a new pipeline when the `ImagePolicy` triggers an event
-The pipelintrigger resource has the following specific elements:
+ `kubectl apply -f examples/create-pipeline-on-git-push/tekton-pipelines.yaml`
+
+4. Deploy the `pipelinetrigger.yaml`:
+
+ ```
+ $ kubectl apply -f examples/create-pipeline-on-git-push/pipelinetrigger.yaml
+ pipelinetrigger.pipeline.jquad.rocks/pipelinetrigger-for-git-project created
+ $ kubectl describe pipelinetrigger pipelinetrigger-for-git-project -n jq-example-namespace
+Name:         pipelinetrigger-for-git-project
+Namespace:    jq-example-namespace
+...
+Status:
+  Conditions:
+    Last Transition Time:  2022-01-12T15:40:26Z
+    Message:
+    Observed Generation:   1
+    Reason:                Succeded
+    Status:                True
+    Type:                  Success
+  Latest Event:            main/03da4fdbf8f3e027fb56dd0d96244c951a24f2b4
+  Latest Pipeline Run:     pipelinetrigger-for-git-project-mkfx
+Events:
+  Type    Reason  Age   From             Message
+  ----    ------  ----  ----             -------
+  Normal  Info    65s   PipelineTrigger  Source microservice-code-repo in namespace jq-example-namespace got new event main/03da4fdbf8f3e027fb56dd0d96244c951a24f2b4
+ ```
+
+5. The `PipelineRun` was successfully created: 
 
 ```
-apiVersion: pipeline.jquad.rocks/v1alpha1
-kind: PipelineTrigger
-metadata:
-  name: pipelinetrigger-sample-image
-  namespace: jq-example-namespace
-spec:
-  source: 
-    kind: ImagePolicy
-    name: latest-image-notifier
-  pipeline: 
-    name: <your pipeline name>
-    serviceAccountName: <your kubernetes service account name>
-    maxHistory: <max number of executed pipelines that should remain on the cluster>
-    retries: <number of retries to execute a pipeline>
-    workspace:
-      name: <your workspace name>
-      size: <size of the workspace>
-      accessMode: ReadWriteOnce
-    inputParams:
-      - name: "repo-url"
-        value: "git@github.com:jquad-group/www-jquad.git"
-      - name: "branch-name"
-        value: "main"
+$ kubectl get pipelineruns -n jq-example-namespace
+NAME                                   SUCCEEDED   REASON      STARTTIME   COMPLETIONTIME
+pipelinetrigger-for-git-project-mkfx   True        Succeeded   2m41s       2m29s
 ```
+
+## Example 2: Build a microservice and create the microservice image when a new base image version is released (`FROM` instruction in the `Dockerfile`)
+
+1. Create the example namespace `jq-example-namespace`. In this namespace are deployed all the examples: 
+
+ `kubectl create ns jq-example-namespace`
+
+2. Deploy the `imagerepository.yaml`. The `ImageRepository` resource fetches the tags for a given container registry: 
+
+ `kubectl apply -f examples/create-pipeline-on-image-update/imagerepository.yaml`
+
+3. Deploy the `imagepolicy.yaml`. The `ImagePolicy` resource selects the latest tag for the list of images acquired by the `ImageRepository` resource according to defined criteria: 
+
+ `kubectl apply -f examples/create-pipeline-on-image-update/imagepolicy.yaml`
+
+4. Deploy the `tekton-pipelines.yaml`. This a dummy tekton pipeline, which is started when the `ImagePolicy` resource creates a new event: 
+
+ `kubectl apply -f examples/create-pipeline-on-image-update/tekton-pipelines.yaml`
+
+5. Deploy the `pipelinetrigger.yaml`:
+
+ `kubectl apply -f examples/create-pipeline-on-image-update/pipelinetrigger.yaml`
 
 # Development / Contribution
 
