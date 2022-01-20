@@ -4,7 +4,7 @@ The Pipeline Trigger Operator listens for events from the Flux v2 `ImagePolicy` 
 
 **Automated creation of Tekton PipelineRuns on events from Flux resources**
 
-[**Short video with the components overview**](https://www.youtube.com/watch?v=3TmczsYnDNc)
+<a href="https://www.youtube.com/watch?v=3TmczsYnDNc" target="_blank">Short video with the components overview</a>
 
 Using the automated pipeline trigger operator is based on the following resources:
 1. `GitRepository` - [**Flux** resource](https://fluxcd.io/docs/components/source/gitrepositories/), configure as required
