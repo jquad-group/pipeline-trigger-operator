@@ -1,8 +1,8 @@
 # Pipeline Trigger Operator
 
-The Pipeline Trigger Operator listens for events from the Flux v2 `ImagePolicy` or `GitRepository` resources and creates a Tekton `PipelineRun` for a given `Pipeline` resouce.
-
 **Automated creation of Tekton PipelineRuns on events from Flux resources**
+
+The Pipeline Trigger Operator listens for events from the Flux v2 `ImagePolicy` or `GitRepository` resources and creates a Tekton `PipelineRun` for a given `Pipeline` resouce.
 
 <a href="https://www.youtube.com/watch?v=3TmczsYnDNc" target="_blank">Short video with the components overview</a>
 
