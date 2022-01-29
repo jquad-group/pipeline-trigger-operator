@@ -47,7 +47,9 @@ spec:
       - name: "repo-url"
         value: "https://github.com/my-project.git"
       - name: "branch-name"
-        value: "main"
+        value: "main" # or "$(branch)" - branch name taken from the Flux GitRepository resource
+      - name: "commit-id"
+        value: "03da4fdbf8f3e027fb56dd0d96244c951a24f2b4" # or "$(commit)" - commit id taken from the Flux Gitrepository resource
 ```
 
 # Installation
@@ -59,6 +61,34 @@ Run the following command:
 The operator is installed in the `pipeline-trigger-operator-system` namespace. 
 
 After the installation of the operator, the `PipelineTrigger` resource is added to the kubernetes cluster.
+
+# Cross Data Center Distribution Lock
+
+If you deploy the operator in a multi cluster setup, but only of them must be working at a time, the argument `--cross-ds-leader-elect` should be added in the `Deployment`:
+
+```
+    spec:
+      containers:
+      - args:
+        - --leader-elect
+        - --cross-dc-leader-elect
+```
+
+In order for the cross datacenter leader election to work a MySQL backend is needed. The configuration for the backend can be set via enviroment variables or via `Secrets` or `ConfigMaps`:
+
+```
+        env:
+          - name: username
+            value: "root" 
+          - name: password
+            value: "mypassword"            
+          - name: address
+            value: "mysql.cluster:3306"
+          - name: plaintext_connection_allowed
+            value: "true"
+          - name: ha_enabled
+            value: "true"            
+```
 
 # Usage
 

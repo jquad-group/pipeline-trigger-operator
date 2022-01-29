@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	imagereflectorv1 "github.com/fluxcd/image-reflector-controller/api/v1beta1"
@@ -13,6 +14,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -137,9 +139,20 @@ var _ = Describe("PipelineTrigger controller", func() {
 				},
 			}
 			Expect(k8sClient.Create(ctx, pipelineTrigger)).Should(Succeed())
-			pipelineTrigger.Status.LatestEvent = "rannox/testimage:0.0.1"
-			pipelineTrigger.Status.LatestPipelineRun = "Unknown"
-			Expect(k8sClient.Status().Update(ctx, pipelineTrigger)).Should(Succeed())
+			imagePolicy.Status.LatestImage = "rannox/testimage:0.0.1"
+			Expect(k8sClient.Status().Update(ctx, imagePolicy)).Should(Succeed())
+
+			//pipelineTrigger.Status.LatestEvent = "rannox/testimage:0.0.1"
+			//pipelineTrigger.Status.LatestPipelineRun = "blabla"
+			//Expect(k8sClient.Status().Update(ctx, pipelineTrigger)).Should(Succeed())
+			fmt.Println("LatestEvent: " + pipelineTrigger.Status.LatestEvent)
+			fmt.Println("LatestPipelineRun: " + pipelineTrigger.Status.LatestPipelineRun)
+
+			imagePolicyList := &imagereflectorv1.ImagePolicyList{}
+			k8sClient.List(ctx, imagePolicyList)
+			for i := 0; i < len(imagePolicyList.Items); i++ {
+				fmt.Println("item: " + imagePolicyList.Items[i].Status.LatestImage)
+			}
 
 			/*
 				pipelineRunListOpts := []client.ListOption{
@@ -160,7 +173,13 @@ var _ = Describe("PipelineTrigger controller", func() {
 				}, timeout, interval).Should(BeTrue())
 			*/
 
-			Eventually(HasPipelineRunCreated(), timeout, interval).Should(BeTrue())
+			Eventually(func() bool {
+				fetched := &tektondevv1.PipelineRun{}
+				err := k8sClient.Get(ctx, types.NamespacedName{Name: pipelineTrigger.Status.LatestPipelineRun, Namespace: "default"}, fetched)
+				return err == nil
+			}, timeout, interval).Should(BeTrue())
+
+			//Eventually(HasPipelineRunCreated(), timeout, interval).Should(BeTrue())
 			//k8sClient.List(ctx, pipelineRunList)
 			//Expect(IsPipelineRunCreated(pipelineRunList)).Should(Equal(1))
 

@@ -43,11 +43,11 @@ func (pipeline Pipeline) CreatePipelineRef() *tektondevv1.PipelineRef {
 	}
 }
 
-func (pipeline Pipeline) CreateParams() []tektondevv1.Param {
+func (pipeline Pipeline) CreateParams(pipelineTrigger PipelineTrigger) []tektondevv1.Param {
 
 	var pipelineParams []tektondevv1.Param
 	for paramNr := 0; paramNr < len(pipeline.InputParams); paramNr++ {
-		pipelineParams = append(pipelineParams, pipeline.InputParams[paramNr].CreateParam())
+		pipelineParams = append(pipelineParams, pipeline.InputParams[paramNr].CreateParam(pipelineTrigger))
 	}
 	return pipelineParams
 }
@@ -76,7 +76,7 @@ func (pipeline Pipeline) CreatePipelineRun(ctx context.Context, req ctrl.Request
 		Spec: tektondevv1.PipelineRunSpec{
 			ServiceAccountName: pipeline.SericeAccountName,
 			PipelineRef:        pipeline.CreatePipelineRef(),
-			Params:             pipeline.CreateParams(),
+			Params:             pipeline.CreateParams(pipelineTrigger),
 			Workspaces: []tektondevv1.WorkspaceBinding{
 				pipeline.Workspace.CreateWorkspaceBinding(),
 			},
