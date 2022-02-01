@@ -11,6 +11,8 @@ Using the automated pipeline trigger operator is based on the following resource
 4. `Pipeline` - [**Tekton** resource](https://tekton.dev/docs/pipelines/pipelines/), configure as required
 5. `PipelineTrigger` - **PipelineTrigger* resource, configuration description in this readme
 
+[Short video with the components overview](https://www.youtube.com/watch?v=3TmczsYnDNc)
+
 ![Workflow](https://github.com/jquad-group/pipeline-trigger-operator/blob/main/img/pipeline-trigger-operator.svg)
 
 # PipelineTrigger Specification
@@ -56,7 +58,7 @@ spec:
 
 Run the following command: 
 
-`kubectl apply -f https://github.com/jquad-group/pipeline-trigger-operator/releases/download/v0.1.3/release.yaml`
+`kubectl apply -f https://github.com/jquad-group/pipeline-trigger-operator/releases/download/v0.1.4/release.yaml`
 
 The operator is installed in the `pipeline-trigger-operator-system` namespace. 
 
