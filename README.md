@@ -38,7 +38,7 @@ spec:
     # Max number of executed pipelines that should remain on the cluster
     maxHistory: 5
     # Number of retries to execute a pipeline
-    retries: 3
+    maxFailedRetries: 3
     # The workspace for the tekton pipeline
     workspace:
       name: workspace
