@@ -123,7 +123,7 @@ var _ = Describe("PipelineTrigger controller", func() {
 					},
 					Pipeline: pipelinev1alpha1.Pipeline{
 						Name:              "build-and-push-base-image",
-						Retries:           1,
+						MaxFailedRetries:  1,
 						MaxHistory:        3,
 						SericeAccountName: "default",
 						Workspace: pipelinev1alpha1.Workspace{

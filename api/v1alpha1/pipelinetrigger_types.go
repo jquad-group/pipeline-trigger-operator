@@ -17,6 +17,8 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"sort"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -52,9 +54,6 @@ type PipelineTriggerStatus struct {
 	// The name of the latest Pipeline Run resource for the received latest event
 	LatestPipelineRun string `json:"latestPipelineRun,omitempty"`
 
-	// The current Pipeline Run failed retry
-	CurrentPipelineRetry int64 `json:"currentPipelineRetry,omitempty"`
-
 	// +patchMergeKey=type
 	// +patchStrategy=merge
 	// +listType=map
@@ -68,6 +67,53 @@ func (m *PipelineTrigger) GetConditions() []metav1.Condition {
 
 func (m *PipelineTrigger) SetConditions(conditions []metav1.Condition) {
 	m.Status.Conditions = conditions
+}
+
+//GetLastCondition retruns the last condition based on the condition timestamp. if no condition is present it return false.
+func (m *PipelineTrigger) GetLastCondition() metav1.Condition {
+	if len(m.Status.Conditions) == 0 {
+		return metav1.Condition{}
+	}
+	//we need to make a copy of the slice
+	copiedConditions := []metav1.Condition{}
+	for _, condition := range m.Status.Conditions {
+		ccondition := condition.DeepCopy()
+		copiedConditions = append(copiedConditions, *ccondition)
+	}
+	sort.Slice(copiedConditions, func(i, j int) bool {
+		return copiedConditions[i].LastTransitionTime.Before(&copiedConditions[j].LastTransitionTime)
+	})
+	return copiedConditions[len(copiedConditions)-1]
+}
+
+func (m *PipelineTrigger) GetCondition(conditionType string) (metav1.Condition, bool) {
+	for _, condition := range m.Status.Conditions {
+		if condition.Type == conditionType {
+			return condition, true
+		}
+	}
+	return metav1.Condition{}, false
+}
+
+func (m *PipelineTrigger) ReplaceCondition(c metav1.Condition) {
+	if len(m.Status.Conditions) == 0 {
+		m.Status.Conditions = append(m.Status.Conditions, c)
+	} else {
+		m.Status.Conditions[0] = c
+	}
+}
+
+func (m *PipelineTrigger) AddOrReplaceCondition(c metav1.Condition) {
+	found := false
+	for i, condition := range m.Status.Conditions {
+		if c.Type == condition.Type {
+			m.Status.Conditions[i] = c
+			found = true
+		}
+	}
+	if found == false {
+		m.Status.Conditions = append(m.Status.Conditions, c)
+	}
 }
 
 //+kubebuilder:object:root=true

@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	"math"
 	"time"
 
 	core "k8s.io/api/core/v1"
@@ -45,7 +46,6 @@ import (
 	pipelinev1alpha1 "github.com/jquad-group/pipeline-trigger-operator/api/v1alpha1"
 
 	tektondevv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
-	clientsetversioned "github.com/tektoncd/pipeline/pkg/client/clientset/versioned"
 )
 
 const (
@@ -64,15 +64,11 @@ type PipelineTriggerReconciler struct {
 	recorder record.EventRecorder
 }
 
-type Tekton struct {
-	TektonClient *clientsetversioned.Clientset
-}
-
 // +kubebuilder:docs-gen:collapse=Reconciler Declaration
 
 /*
 There are two additional resources that the controller needs to have access to, other than PipelineTriggers.
-- It needs to be able to fully manage Tekton PipelineRuns, as well as check their status.
+- It needs to be able to create Tekton PipelineRuns, as well as check their status.
 - It also needs to be able to get, list and watch ImagePolicies and GitRepositories.
 */
 
@@ -89,7 +85,7 @@ There are two additional resources that the controller needs to have access to, 
 
 /*
 `Reconcile` will be in charge of reconciling the state of PipelineTriggers.
-PipelineTriggers are used to manage PipelineRuns whose pods are started whenever the Source defined in the PipelineTrigger is updated.
+PipelineTriggers are used to manage PipelineRuns, which are created whenever the Source defined in the PipelineTrigger is updated.
 When the Source detects new version, a new Tekton PipelineRun starts
 */
 func (r *PipelineTriggerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -102,46 +98,74 @@ func (r *PipelineTriggerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, nil
 	}
 
+	// check if the referenced source exists
+	if err := r.existsSourceResource(ctx, pipelineTrigger); err != nil {
+		// requeue with error (maybe the resource was deployt afterwards?)
+		return r.ManageSourceDoesNotExistsStatus(ctx, &pipelineTrigger, err, req)
+	}
+
 	// check if the referenced tekton pipeline exists
 	if err := r.existsPipelineResource(ctx, pipelineTrigger); err != nil {
+		// requeue with error (maybe the resource was deployt afterwards?)
 		return r.ManageErrorWithRequeue(ctx, &pipelineTrigger, err, req)
 	}
 
 	var latestEvent string
-	// Check if a GitRepository or ImagePolicy Source exists
-	if err := r.existsSourceResource(ctx, pipelineTrigger); err != nil {
-		// requeue with error (maybe the resource was deployt afterwards?)
-		return r.ManageSourceDoesNotExistsStatus(ctx, &pipelineTrigger, err, req)
-	} else {
-		// Get the Latest Source Event
-		latestEvent = r.getSourceLatestEvent(ctx, pipelineTrigger)
-		if latestEvent != pipelineTrigger.Status.LatestEvent {
-			newVersionMsg := "Source " + pipelineTrigger.Spec.Source.Name + " in namespace " + pipelineTrigger.Namespace + " got new event " + latestEvent
-			r.recorder.Event(&pipelineTrigger, core.EventTypeNormal, "Info", newVersionMsg)
-			return r.ManageGotNewEventStatus(ctx, &pipelineTrigger, req, latestEvent)
-		}
+	// Get the Latest Source Event
+	latestEvent = r.getSourceLatestEvent(ctx, pipelineTrigger)
 
+	// Get the list of pipelineruns for this pipelinetrigger
+	successfulPipelineRunList, listFailed := pipelineTrigger.Spec.Pipeline.GetSuccessfulPipelineRuns(ctx, req, pipelineTrigger)
+	if listFailed != nil {
+		log.Error(listFailed, "Failed to list PipelineRuns in ", pipelineTrigger.Namespace, " with label ", pipelineTrigger.Name)
+	}
+	failedPipelineRunList, listFailed := pipelineTrigger.Spec.Pipeline.GetFailedPipelineRuns(ctx, req, pipelineTrigger)
+	if listFailed != nil {
+		log.Error(listFailed, "Failed to list PipelineRuns in ", pipelineTrigger.Namespace, " with label ", pipelineTrigger.Name)
 	}
 
-	if pipelineTrigger.Status.LatestPipelineRun == "Unknown" {
-		pipelineRunList := r.getPipelineRuns(ctx, pipelineTrigger)
-		if len(pipelineRunList.Items) < int(pipelineTrigger.Spec.Pipeline.MaxHistory) {
-			pr, pipelineRunError := pipelineTrigger.Spec.Pipeline.CreatePipelineRun(ctx, req, pipelineTrigger)
+	// Check if the defined state is the same as the cluster state
+	if latestEvent == pipelineTrigger.Status.LatestEvent {
+		condition := pipelineTrigger.GetLastCondition()
+		if condition.Type == apis.ReconcileSuccess {
+			// defined state is the same as the cluster state
+			return ctrl.Result{}, nil
+		}
+		if condition.Type == apis.ReconcileError && len(failedPipelineRunList.Items) >= int(pipelineTrigger.Spec.Pipeline.MaxFailedRetries) {
+			// defined state differs from cluster state, pipelinerun failed, cannot recover and thus not requeueing
+			return ctrl.Result{}, nil
+		}
+	}
+
+	// check if the received event is a new one
+	if latestEvent != pipelineTrigger.Status.LatestEvent {
+		newVersionMsg := "Source " + pipelineTrigger.Spec.Source.Name + " in namespace " + pipelineTrigger.Namespace + " got new event " + latestEvent
+		r.recorder.Event(&pipelineTrigger, core.EventTypeNormal, "Info", newVersionMsg)
+
+		// check if the number of succesfull pipelines < MaxHistory, and start a new pipeline
+		if len(successfulPipelineRunList.Items) < int(pipelineTrigger.Spec.Pipeline.MaxHistory) {
+			pr, pipelineRunError := pipelineTrigger.Spec.Pipeline.CreatePipelineRun(ctx, req, pipelineTrigger, latestEvent)
 			if pipelineRunError != nil {
 				log.Error(pipelineRunError, "Failed to create new PipelineRun", "PipelineTrigger.Namespace", pipelineTrigger.Namespace, "PipelineTrigger.Name", pipelineTrigger.Name)
 				return r.ManageErrorWithRequeue(ctx, &pipelineTrigger, pipelineRunError, req)
 			}
 			return r.ManagePipelineRunCreatedStatus(ctx, &pipelineTrigger, req, latestEvent, pr)
-		} else {
+		}
+
+		if len(successfulPipelineRunList.Items) >= int(pipelineTrigger.Spec.Pipeline.MaxHistory) {
 			// if pipelineruns > MaxHistory delete one pipelinerun, return and requeue
-			r.deleteRandomPipelineRun(ctx, pipelineRunList)
+			r.deleteRandomPipelineRun(ctx, successfulPipelineRunList)
 			return r.ManageUnknownWithRequeue(ctx, &pipelineTrigger, req)
 		}
 	}
 
-	// Sometimes the status needs a little bit more time to get updated, therefore we start another reconciliation
-	if pipelineTrigger.Status.LatestPipelineRun == "Unknown" {
-		return ctrl.Result{RequeueAfter: time.Second * 30}, nil
+	if pipelineTrigger.GetLastCondition().Type == apis.ReconcileError && pipelineTrigger.Status.LatestPipelineRun == "" {
+		pr, pipelineRunError := pipelineTrigger.Spec.Pipeline.CreatePipelineRun(ctx, req, pipelineTrigger, latestEvent)
+		if pipelineRunError != nil {
+			log.Error(pipelineRunError, "Failed to create new PipelineRun", "PipelineTrigger.Namespace", pipelineTrigger.Namespace, "PipelineTrigger.Name", pipelineTrigger.Name)
+			return r.ManageErrorWithRequeue(ctx, &pipelineTrigger, pipelineRunError, req)
+		}
+		return r.ManagePipelineRunCreatedStatus(ctx, &pipelineTrigger, req, latestEvent, pr)
 	}
 
 	// Finds the started PipelineRun
@@ -154,13 +178,7 @@ func (r *PipelineTriggerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	if isPipelineRunSuccessful(foundPipelineRun) {
 		return r.ManagePipelineRunSucceededStatus(ctx, &pipelineTrigger, req)
 	} else if isPipelineRunFailure(foundPipelineRun) {
-		// checks if the PipelineRun has failed, resets the LatestPipelineRun status in order to start another reconciliation
-		if pipelineTrigger.Status.CurrentPipelineRetry < pipelineTrigger.Spec.Pipeline.Retries {
-			return r.ManagePipelineRunRetriedStatus(ctx, &pipelineTrigger, req)
-		} else {
-			// if the max number of failures has reached, stop the reconciliation and set error status
-			return r.ManageError(ctx, &pipelineTrigger, req)
-		}
+		return r.ManagePipelineRunRetriedStatus(ctx, &pipelineTrigger, req)
 	} else {
 		// Requeue if the PipelineRun is still running
 		return r.ManageUnknownWithRequeue(ctx, &pipelineTrigger, req)
@@ -278,29 +296,6 @@ func (r *PipelineTriggerReconciler) findObjectsForSource(source client.Object) [
 	return requests
 }
 
-func (r *PipelineTriggerReconciler) findObjectsForPipeline(pipeline client.Object) []reconcile.Request {
-	attachedPipelineTriggers := &pipelinev1alpha1.PipelineTriggerList{}
-	listOps := &client.ListOptions{
-		FieldSelector: fields.OneTermEqualSelector(pipelineField, pipeline.GetName()),
-		Namespace:     pipeline.GetNamespace(),
-	}
-	err := r.List(context.TODO(), attachedPipelineTriggers, listOps)
-	if err != nil {
-		return []reconcile.Request{}
-	}
-
-	requests := make([]reconcile.Request, len(attachedPipelineTriggers.Items))
-	for i, item := range attachedPipelineTriggers.Items {
-		requests[i] = reconcile.Request{
-			NamespacedName: types.NamespacedName{
-				Name:      item.GetName(),
-				Namespace: item.GetNamespace(),
-			},
-		}
-	}
-	return requests
-}
-
 func (r *PipelineTriggerReconciler) findObjectsForPipelineRun(pipelineRun client.Object) []reconcile.Request {
 	attachedPipelineTriggers := &pipelinev1alpha1.PipelineTriggerList{}
 	listOps := &client.ListOptions{
@@ -322,26 +317,6 @@ func (r *PipelineTriggerReconciler) findObjectsForPipelineRun(pipelineRun client
 		}
 	}
 	return requests
-}
-
-// Helper functions to check and remove string from a slice of strings.
-func containsString(slice []string, s string) bool {
-	for _, item := range slice {
-		if item == s {
-			return true
-		}
-	}
-	return false
-}
-
-func (r *PipelineTriggerReconciler) getPipelineRuns(ctx context.Context, pipelineTrigger pipelinev1alpha1.PipelineTrigger) *tektondevv1.PipelineRunList {
-	pipelineRunList := &tektondevv1.PipelineRunList{}
-	pipelineRunListOpts := []client.ListOption{
-		client.InNamespace(pipelineTrigger.Namespace),
-		client.MatchingLabels{"pipeline.jquad.rocks/pipelinetrigger": pipelineTrigger.Name},
-	}
-	r.List(ctx, pipelineRunList, pipelineRunListOpts...)
-	return pipelineRunList
 }
 
 func (r *PipelineTriggerReconciler) getSourceLatestEvent(ctx context.Context, pipelineTrigger pipelinev1alpha1.PipelineTrigger) string {
@@ -405,40 +380,12 @@ func (r *PipelineTriggerReconciler) deleteRandomPipelineRun(ctx context.Context,
 	return nil
 }
 
-func (r *PipelineTriggerReconciler) ManageUnknownWithRequeue(context context.Context, obj client.Object, req ctrl.Request) (reconcile.Result, error) {
-	log := log.FromContext(context)
-	if err := r.Get(context, req.NamespacedName, obj); err != nil {
-		log.Error(err, "unable to get obj (ManageUnknownWithRequeue)")
-		return reconcile.Result{}, err
-	}
-	if conditionsAware, updateStatus := (obj).(apis.ConditionsAware); updateStatus {
-		condition := metav1.Condition{
-			Type:               apis.ReconcileUnknown,
-			LastTransitionTime: metav1.Now(),
-			ObservedGeneration: obj.GetGeneration(),
-			Reason:             apis.ReconcileUnknown,
-			Status:             metav1.ConditionUnknown,
-		}
-		conditionsAware.SetConditions(apis.ReplaceCondition(condition, conditionsAware.GetConditions()))
-		err := r.Status().Update(context, obj)
-		if err != nil {
-			log.Error(err, "unable to update status (ManageUnknownWithRequeue)")
-			return reconcile.Result{}, err
-		}
-	} else {
-		log.V(1).Info("object is not ConditionsAware, not setting status")
-	}
-	return reconcile.Result{RequeueAfter: time.Second * 50}, nil
-}
-
-func (r *PipelineTriggerReconciler) ManageGotNewEventStatus(context context.Context, obj *pipelinev1alpha1.PipelineTrigger, req ctrl.Request, latestEvent string) (reconcile.Result, error) {
+func (r *PipelineTriggerReconciler) ManageUnknownWithRequeue(context context.Context, obj *pipelinev1alpha1.PipelineTrigger, req ctrl.Request) (reconcile.Result, error) {
 	log := log.FromContext(context)
 	if err := r.Get(context, types.NamespacedName{Name: obj.Name, Namespace: obj.Namespace}, obj); err != nil {
-		log.Error(err, "unable to get obj (ManagePipelineRunCreatedStatus)")
+		log.Error(err, "unable to get obj")
 		return reconcile.Result{}, err
 	}
-	obj.Status.LatestPipelineRun = "Unknown"
-	obj.Status.LatestEvent = latestEvent
 	condition := metav1.Condition{
 		Type:               apis.ReconcileUnknown,
 		LastTransitionTime: metav1.Now(),
@@ -446,24 +393,24 @@ func (r *PipelineTriggerReconciler) ManageGotNewEventStatus(context context.Cont
 		Reason:             apis.ReconcileUnknown,
 		Status:             metav1.ConditionUnknown,
 	}
-	var conditions []metav1.Condition
-	conditions = append(conditions, condition)
-	obj.SetConditions(conditions)
-
+	obj.AddOrReplaceCondition(condition)
 	err := r.Status().Update(context, obj)
 	if err != nil {
-		log.Error(err, "unable to update latest event status")
-		r.ManageErrorWithRequeue(context, obj, err, req)
+		log.Error(err, "unable to update status")
+		return reconcile.Result{}, err
 	}
+
 	return reconcile.Result{RequeueAfter: time.Second * 50}, nil
 }
 
 func (r *PipelineTriggerReconciler) ManagePipelineRunCreatedStatus(context context.Context, obj *pipelinev1alpha1.PipelineTrigger, req ctrl.Request, latestEvent string, pipelineRun *tektondevv1.PipelineRun) (reconcile.Result, error) {
 	log := log.FromContext(context)
+
 	if err := r.Get(context, types.NamespacedName{Name: obj.Name, Namespace: obj.Namespace}, obj); err != nil {
-		log.Error(err, "unable to get obj (ManagePipelineRunCreatedStatus)")
+		log.Error(err, "unable to get obj")
 		return reconcile.Result{}, err
 	}
+
 	obj.Status.LatestPipelineRun = pipelineRun.Name
 	obj.Status.LatestEvent = latestEvent
 	ctrl.SetControllerReference(obj, pipelineRun, r.Scheme)
@@ -475,13 +422,10 @@ func (r *PipelineTriggerReconciler) ManagePipelineRunCreatedStatus(context conte
 		Reason:             apis.ReconcileUnknown,
 		Status:             metav1.ConditionUnknown,
 	}
-	var conditions []metav1.Condition
-	conditions = append(conditions, condition)
-	obj.SetConditions(conditions)
-
+	obj.AddOrReplaceCondition(condition)
 	err := r.Status().Update(context, obj)
 	if err != nil {
-		log.Error(err, "unable to update status (ManagePipelineRunCreatedStatus)")
+		log.Error(err, "unable to update status")
 		return reconcile.Result{}, err
 	}
 
@@ -491,39 +435,40 @@ func (r *PipelineTriggerReconciler) ManagePipelineRunCreatedStatus(context conte
 func (r *PipelineTriggerReconciler) ManagePipelineRunRetriedStatus(context context.Context, obj *pipelinev1alpha1.PipelineTrigger, req ctrl.Request) (reconcile.Result, error) {
 	log := log.FromContext(context)
 	if err := r.Get(context, types.NamespacedName{Name: obj.Name, Namespace: obj.Namespace}, obj); err != nil {
-		log.Error(err, "unable to get obj (ManagePipelineRunRetriedStatus)")
+		log.Error(err, "unable to get obj")
 		return reconcile.Result{}, err
 	}
-	obj.Status.CurrentPipelineRetry++
-	obj.Status.LatestPipelineRun = "Unknown"
 
+	obj.Status.LatestPipelineRun = ""
 	condition := metav1.Condition{
-		Type:               apis.ReconcileUnknown,
+		Type:               apis.ReconcileError,
 		LastTransitionTime: metav1.Now(),
 		ObservedGeneration: obj.GetGeneration(),
-		Reason:             apis.ReconcileUnknown,
-		Status:             metav1.ConditionUnknown,
+		Reason:             apis.ReconcileErrorReason,
+		Status:             metav1.ConditionFalse,
 	}
-	var conditions []metav1.Condition
-	conditions = append(conditions, condition)
-	obj.SetConditions(conditions)
+
+	retryInterval := condition.LastTransitionTime.Sub(obj.GetLastCondition().LastTransitionTime.Time).Round(time.Second)
+
+	obj.AddOrReplaceCondition(condition)
 
 	err := r.Status().Update(context, obj)
 	if err != nil {
-		log.Error(err, "unable to update status (ManagePipelineRunRetriedStatus)")
+		log.Error(err, "unable to update status")
 		return reconcile.Result{}, err
 	}
 
-	return reconcile.Result{RequeueAfter: time.Second * 50}, nil
+	//return reconcile.Result{RequeueAfter: time.Second * 50}, nil
+	return reconcile.Result{RequeueAfter: time.Duration(math.Min(float64(retryInterval.Nanoseconds()*2), float64(time.Hour.Nanoseconds()*6)))}, nil
 }
 
 func (r *PipelineTriggerReconciler) ManagePipelineRunSucceededStatus(context context.Context, obj *pipelinev1alpha1.PipelineTrigger, req ctrl.Request) (reconcile.Result, error) {
 	log := log.FromContext(context)
 	if err := r.Get(context, types.NamespacedName{Name: obj.Name, Namespace: obj.Namespace}, obj); err != nil {
-		log.Error(err, "unable to get obj (ManagePipelineRunSucceededStatus)")
+		log.Error(err, "unable to get obj")
 		return reconcile.Result{}, err
 	}
-	obj.Status.CurrentPipelineRetry = 0
+
 	condition := metav1.Condition{
 		Type:               apis.ReconcileSuccess,
 		LastTransitionTime: metav1.Now(),
@@ -531,13 +476,11 @@ func (r *PipelineTriggerReconciler) ManagePipelineRunSucceededStatus(context con
 		Reason:             apis.ReconcileSuccessReason,
 		Status:             metav1.ConditionTrue,
 	}
-	var conditions []metav1.Condition
-	conditions = append(conditions, condition)
-	obj.SetConditions(conditions)
 
+	obj.AddOrReplaceCondition(condition)
 	err := r.Status().Update(context, obj)
 	if err != nil {
-		log.Error(err, "unable to update status (ManagePipelineRunSucceededStatus)")
+		log.Error(err, "unable to update status")
 		return reconcile.Result{}, err
 	}
 	return reconcile.Result{}, nil
@@ -546,12 +489,10 @@ func (r *PipelineTriggerReconciler) ManagePipelineRunSucceededStatus(context con
 func (r *PipelineTriggerReconciler) ManageSourceDoesNotExistsStatus(context context.Context, obj *pipelinev1alpha1.PipelineTrigger, issue error, req ctrl.Request) (reconcile.Result, error) {
 	log := log.FromContext(context)
 	if err := r.Get(context, types.NamespacedName{Name: obj.Name, Namespace: obj.Namespace}, obj); err != nil {
-		log.Error(err, "unable to get obj (ManageSourceDoesNotExistsStatus)")
+		log.Error(err, "unable to get obj")
 		return reconcile.Result{}, err
 	}
 	r.recorder.Event(obj, "Warning", "ProcessingError", issue.Error())
-
-	currentConditions := obj.Status.Conditions
 
 	condition := metav1.Condition{
 		Type:               apis.ReconcileError,
@@ -562,135 +503,62 @@ func (r *PipelineTriggerReconciler) ManageSourceDoesNotExistsStatus(context cont
 		Status:             metav1.ConditionTrue,
 	}
 
-	var conditions []metav1.Condition
-	conditions = append(conditions, condition)
-
-	if len(currentConditions) > 0 {
-		if currentConditions[0].Message != conditions[0].Message {
-			obj.SetConditions(conditions)
-			err := r.Status().Update(context, obj)
-			if err != nil {
-				log.Error(err, "unable to update status (ManageSourceDoesNotExistsStatus)")
-				return reconcile.Result{}, err
-			}
-		}
-	} else {
-		obj.SetConditions(conditions)
-		err := r.Status().Update(context, obj)
-		if err != nil {
-			log.Error(err, "unable to update status (ManageSourceDoesNotExistsStatus)")
-			return reconcile.Result{}, err
-		}
+	obj.AddOrReplaceCondition(condition)
+	err := r.Status().Update(context, obj)
+	if err != nil {
+		log.Error(err, "unable to update status")
+		return reconcile.Result{}, err
 	}
 
 	return reconcile.Result{RequeueAfter: time.Second * 380}, issue
 }
 
-func (r *PipelineTriggerReconciler) ManageSuccess(context context.Context, obj *pipelinev1alpha1.PipelineTrigger, req ctrl.Request) (reconcile.Result, error) {
+func (r *PipelineTriggerReconciler) ManageError(context context.Context, obj *pipelinev1alpha1.PipelineTrigger, req ctrl.Request) (reconcile.Result, error) {
 	log := log.FromContext(context)
 	if err := r.Get(context, types.NamespacedName{Name: obj.Name, Namespace: obj.Namespace}, obj); err != nil {
-		log.Error(err, "unable to get obj (ManageSuccess)")
+		log.Error(err, "unable to get obj")
 		return reconcile.Result{}, err
 	}
+
 	condition := metav1.Condition{
-		Type:               apis.ReconcileSuccess,
+		Type:               apis.ReconcileError,
 		LastTransitionTime: metav1.Now(),
 		ObservedGeneration: obj.GetGeneration(),
-		Reason:             apis.ReconcileSuccessReason,
-		Status:             metav1.ConditionTrue,
+		Reason:             apis.ReconcileErrorReason,
+		Status:             metav1.ConditionFalse,
 	}
-	var conditions []metav1.Condition
-	conditions = append(conditions, condition)
-	obj.SetConditions(conditions)
+	obj.AddOrReplaceCondition(condition)
 	err := r.Status().Update(context, obj)
 	if err != nil {
-		log.Error(err, "unable to update status (ManageSuccess)")
+		log.Error(err, "unable to update status")
 		return reconcile.Result{}, err
 	}
 	return reconcile.Result{}, nil
 }
 
-func (r *PipelineTriggerReconciler) ManageError(context context.Context, obj client.Object, req ctrl.Request) (reconcile.Result, error) {
+func (r *PipelineTriggerReconciler) ManageErrorWithRequeue(context context.Context, obj *pipelinev1alpha1.PipelineTrigger, issue error, req ctrl.Request) (reconcile.Result, error) {
 	log := log.FromContext(context)
-	if err := r.Get(context, req.NamespacedName, obj); err != nil {
-		log.Error(err, "unable to get obj (ManageError)")
-		return reconcile.Result{}, err
-	}
-	if conditionsAware, updateStatus := (obj).(apis.ConditionsAware); updateStatus {
-		condition := metav1.Condition{
-			Type:               apis.ReconcileError,
-			LastTransitionTime: metav1.Now(),
-			ObservedGeneration: obj.GetGeneration(),
-			Reason:             apis.ReconcileErrorReason,
-			Status:             metav1.ConditionFalse,
-		}
-		conditionsAware.SetConditions(apis.ReplaceCondition(condition, conditionsAware.GetConditions()))
-		err := r.Status().Update(context, obj)
-		if err != nil {
-			log.Error(err, "unable to update status (ManageError)")
-			return reconcile.Result{}, err
-		}
-	} else {
-		log.V(1).Info("object is not ConditionsAware, not setting status")
-	}
-	return reconcile.Result{}, nil
-}
-
-func (r *PipelineTriggerReconciler) ManageSuccessWithRequeue(context context.Context, obj client.Object, req ctrl.Request) (reconcile.Result, error) {
-	log := log.FromContext(context)
-	if err := r.Get(context, req.NamespacedName, obj); err != nil {
-		log.Error(err, "unable to get obj (ManageSuccessWithRequeue)")
-		return reconcile.Result{}, err
-	}
-	if conditionsAware, updateStatus := (obj).(apis.ConditionsAware); updateStatus {
-		condition := metav1.Condition{
-			Type:               apis.ReconcileSuccess,
-			LastTransitionTime: metav1.Now(),
-			ObservedGeneration: obj.GetGeneration(),
-			Reason:             apis.ReconcileSuccessReason,
-			Status:             metav1.ConditionTrue,
-		}
-		conditionsAware.SetConditions(apis.ReplaceCondition(condition, conditionsAware.GetConditions()))
-		err := r.Status().Update(context, obj)
-		if err != nil {
-			log.Error(err, "unable to update status (ManageSuccessWithRequeue)")
-			return reconcile.Result{RequeueAfter: time.Second * 10}, err
-		}
-	} else {
-		log.V(1).Info("object is not ConditionsAware, not setting status")
-	}
-	return reconcile.Result{RequeueAfter: time.Second * 10}, nil
-}
-
-//ManageErrorWithRequeue will take care of the following:
-// 1. generate a warning event attached to the passed CR
-// 2. set the status of the passed CR to a error condition if the object implements the apis.ConditionsStatusAware interface
-// 3. return a reconcile status with with the passed requeueAfter and error
-func (r *PipelineTriggerReconciler) ManageErrorWithRequeue(context context.Context, obj client.Object, issue error, req ctrl.Request) (reconcile.Result, error) {
-	log := log.FromContext(context)
-	if err := r.Get(context, req.NamespacedName, obj); err != nil {
-		log.Error(err, "unable to get obj (ManageErrorWithRequeue)")
+	if err := r.Get(context, types.NamespacedName{Name: obj.Name, Namespace: obj.Namespace}, obj); err != nil {
+		log.Error(err, "unable to get obj")
 		return reconcile.Result{}, err
 	}
 	r.recorder.Event(obj, "Warning", "ProcessingError", issue.Error())
-	if conditionsAware, updateStatus := (obj).(apis.ConditionsAware); updateStatus {
-		condition := metav1.Condition{
-			Type:               apis.ReconcileError,
-			LastTransitionTime: metav1.Now(),
-			ObservedGeneration: obj.GetGeneration(),
-			Message:            issue.Error(),
-			Reason:             apis.ReconcileErrorReason,
-			Status:             metav1.ConditionTrue,
-		}
-		conditionsAware.SetConditions(apis.ReplaceCondition(condition, conditionsAware.GetConditions()))
-		err := r.Status().Update(context, obj)
-		if err != nil {
-			log.Error(err, "unable to update status (ManageErrorWithRequeue)")
-			return reconcile.Result{RequeueAfter: time.Second * 10}, err
-		}
-	} else {
-		log.V(1).Info("object is not ConditionsAware, not setting status")
+
+	condition := metav1.Condition{
+		Type:               apis.ReconcileError,
+		LastTransitionTime: metav1.Now(),
+		ObservedGeneration: obj.GetGeneration(),
+		Message:            issue.Error(),
+		Reason:             apis.ReconcileErrorReason,
+		Status:             metav1.ConditionTrue,
 	}
+	obj.AddOrReplaceCondition(condition)
+	err := r.Status().Update(context, obj)
+	if err != nil {
+		log.Error(err, "unable to update status")
+		return reconcile.Result{RequeueAfter: time.Second * 10}, err
+	}
+
 	return reconcile.Result{RequeueAfter: time.Second * 10}, issue
 }
 

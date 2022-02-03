@@ -2,8 +2,7 @@ package v1alpha1
 
 import (
 	"context"
-	"math/rand"
-	"time"
+	"strings"
 
 	"github.com/jquad-group/pipeline-trigger-operator/pkg/meta"
 	tektondevv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
@@ -29,7 +28,7 @@ type Pipeline struct {
 	// +kubebuilder:validation:Maximum=10
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:validation:Required
-	Retries int64 `json:"retries"`
+	MaxFailedRetries int64 `json:"maxFailedRetries"`
 
 	// +kubebuilder:validation:Maximum=10
 	// +kubebuilder:validation:Minimum=1
@@ -52,7 +51,7 @@ func (pipeline Pipeline) CreateParams(pipelineTrigger PipelineTrigger) []tektond
 	return pipelineParams
 }
 
-func (pipeline Pipeline) CreatePipelineRun(ctx context.Context, req ctrl.Request, pipelineTrigger PipelineTrigger) (*tektondevv1.PipelineRun, error) {
+func (pipeline Pipeline) CreatePipelineRun(ctx context.Context, req ctrl.Request, pipelineTrigger PipelineTrigger, latestEvent string) (*tektondevv1.PipelineRun, error) {
 	log := log.FromContext(ctx)
 
 	cfg := ctrl.GetConfigOrDie()
@@ -64,14 +63,12 @@ func (pipeline Pipeline) CreatePipelineRun(ctx context.Context, req ctrl.Request
 	}
 
 	pipelineRunTypeMeta := meta.TypeMeta("PipelineRun", "tekton.dev/v1beta1")
-	pipelineRunName := pipelineTrigger.Name + "-" + generateRandomString(4, "abcdefghijklmnopqrstuvwxyz")
 	pr := &tektondevv1.PipelineRun{
 		TypeMeta: pipelineRunTypeMeta,
-		//		ObjectMeta: meta.ObjectMeta(meta.NamespacedName(pipelineTrigger.Namespace, pipelineRunName)),
 		ObjectMeta: v1.ObjectMeta{
-			Name:      pipelineRunName,
-			Namespace: pipelineTrigger.Namespace,
-			Labels:    setLabel(pipelineTrigger.Name),
+			GenerateName: pipelineTrigger.Name + "-",
+			Namespace:    pipelineTrigger.Namespace,
+			Labels:       setLabel(pipelineTrigger.Name + "-" + strings.ReplaceAll(latestEvent, "/", "-")),
 		},
 		Spec: tektondevv1.PipelineRunSpec{
 			ServiceAccountName: pipeline.SericeAccountName,
@@ -89,14 +86,78 @@ func (pipeline Pipeline) CreatePipelineRun(ctx context.Context, req ctrl.Request
 
 }
 
-func generateRandomString(length int, charset string) string {
-	var seededRand *rand.Rand = rand.New(rand.NewSource(time.Now().UnixNano()))
+func (pipeline Pipeline) GetSuccessfulPipelineRuns(ctx context.Context, req ctrl.Request, pipelineTrigger PipelineTrigger) (*tektondevv1.PipelineRunList, error) {
+	log := log.FromContext(ctx)
 
-	b := make([]byte, length)
-	for i := range b {
-		b[i] = charset[seededRand.Intn(len(charset))]
+	cfg := ctrl.GetConfigOrDie()
+
+	tektonClient, err := clientsetversioned.NewForConfig(cfg)
+
+	if err != nil {
+		log.Info("Cannot create tekton client.")
 	}
-	return string(b)
+
+	// the status is empty during the first reconciliation
+	if len(pipelineTrigger.Status.Conditions) > 0 {
+		opts := v1.ListOptions{LabelSelector: "pipeline.jquad.rocks/pipelinetrigger=" + pipelineTrigger.Name + "-" + strings.ReplaceAll(pipelineTrigger.Status.LatestEvent, "/", "-")}
+		pipelineRunList, err := tektonClient.TektonV1beta1().PipelineRuns(pipelineTrigger.Namespace).List(ctx, opts)
+
+		var successfulRuns []tektondevv1.PipelineRun
+		for i := range pipelineRunList.Items {
+			item := pipelineRunList.Items[i]
+
+			if len(item.Status.Conditions) > 0 {
+				if string(item.Status.Conditions[0].Reason) == "Succeeded" {
+					successfulRuns = append(successfulRuns, item)
+				}
+			}
+		}
+
+		var successfulRunsList tektondevv1.PipelineRunList
+		successfulRunsList.Items = successfulRuns
+		return &successfulRunsList, err
+	} else {
+		var successfulRunsList tektondevv1.PipelineRunList
+		return &successfulRunsList, err
+	}
+}
+
+func (pipeline Pipeline) GetFailedPipelineRuns(ctx context.Context, req ctrl.Request, pipelineTrigger PipelineTrigger) (*tektondevv1.PipelineRunList, error) {
+	log := log.FromContext(ctx)
+
+	cfg := ctrl.GetConfigOrDie()
+
+	tektonClient, err := clientsetversioned.NewForConfig(cfg)
+
+	if err != nil {
+		log.Info("Cannot create tekton client.")
+	}
+
+	// the status is empty during the first reconciliation
+	if len(pipelineTrigger.Status.Conditions) > 0 {
+		opts := v1.ListOptions{LabelSelector: "pipeline.jquad.rocks/pipelinetrigger=" + pipelineTrigger.Name + "-" + strings.ReplaceAll(pipelineTrigger.Status.LatestEvent, "/", "-")}
+
+		pipelineRunList, err := tektonClient.TektonV1beta1().PipelineRuns(pipelineTrigger.Namespace).List(ctx, opts)
+
+		var failedRuns []tektondevv1.PipelineRun
+		for i := range pipelineRunList.Items {
+			item := pipelineRunList.Items[i]
+
+			if len(item.Status.Conditions) > 0 {
+				if string(item.Status.Conditions[0].Reason) == "Failed" {
+					failedRuns = append(failedRuns, item)
+				}
+			}
+		}
+
+		var failedRunsList tektondevv1.PipelineRunList
+		failedRunsList.Items = failedRuns
+		return &failedRunsList, err
+	} else {
+		var failedRunsList tektondevv1.PipelineRunList
+		return &failedRunsList, err
+	}
+
 }
 
 func setLabel(name string) map[string]string {
