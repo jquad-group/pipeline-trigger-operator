@@ -11,14 +11,14 @@ type InputParam struct {
 	Value string `json:"value"`
 }
 
-func (inputParam InputParam) CreateParam(pipelineTrigger PipelineTrigger) tektondevv1.Param {
+func (inputParam InputParam) CreateParam(pipelineTrigger PipelineTrigger, latestEvent string) tektondevv1.Param {
 
 	if inputParam.Value == "$(branch)" {
-		inputParam.Value = getBranchName(pipelineTrigger.Status.LatestEvent)
+		inputParam.Value = getBranchName(latestEvent)
 	}
 
 	if inputParam.Value == "$(commit)" {
-		inputParam.Value = getCommitId(pipelineTrigger.Status.LatestEvent)
+		inputParam.Value = getCommitId(latestEvent)
 	}
 
 	return tektondevv1.Param{

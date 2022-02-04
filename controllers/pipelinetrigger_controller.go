@@ -18,7 +18,6 @@ package controllers
 
 import (
 	"context"
-	"math"
 	"time"
 
 	core "k8s.io/api/core/v1"
@@ -448,7 +447,7 @@ func (r *PipelineTriggerReconciler) ManagePipelineRunRetriedStatus(context conte
 		Status:             metav1.ConditionFalse,
 	}
 
-	retryInterval := condition.LastTransitionTime.Sub(obj.GetLastCondition().LastTransitionTime.Time).Round(time.Second)
+	//retryInterval := condition.LastTransitionTime.Sub(obj.GetLastCondition().LastTransitionTime.Time).Round(time.Second)
 
 	obj.AddOrReplaceCondition(condition)
 
@@ -458,8 +457,8 @@ func (r *PipelineTriggerReconciler) ManagePipelineRunRetriedStatus(context conte
 		return reconcile.Result{}, err
 	}
 
-	//return reconcile.Result{RequeueAfter: time.Second * 50}, nil
-	return reconcile.Result{RequeueAfter: time.Duration(math.Min(float64(retryInterval.Nanoseconds()*2), float64(time.Hour.Nanoseconds()*6)))}, nil
+	return reconcile.Result{RequeueAfter: time.Minute * 10}, nil
+	//return reconcile.Result{RequeueAfter: time.Duration(math.Min(float64(retryInterval.Nanoseconds()*10), float64(time.Hour.Nanoseconds()*15)))}, nil
 }
 
 func (r *PipelineTriggerReconciler) ManagePipelineRunSucceededStatus(context context.Context, obj *pipelinev1alpha1.PipelineTrigger, req ctrl.Request) (reconcile.Result, error) {
