@@ -11,7 +11,7 @@ spec:
     name: build-and-push-microservice-on-git-push
     serviceAccountName: default
     maxHistory: 3
-    retries: 2 # if the first pipeline fails, retry one more time
+    maxFailedRetries: 2 
     workspace:
       name: workspace
       size: 1Gi

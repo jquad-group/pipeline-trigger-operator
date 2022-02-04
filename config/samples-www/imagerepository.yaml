@@ -1,8 +1,0 @@
-apiVersion: image.toolkit.fluxcd.io/v1beta1
-kind: ImageRepository
-metadata:
-  name: app1
-  namespace: test-build
-spec:
-  interval: 5m
-  image: rannox/testimage
