@@ -57,8 +57,9 @@ spec:
 # Installation
 
 Run the following command: 
-
-`kubectl apply -f https://github.com/jquad-group/pipeline-trigger-operator/releases/download/v0.1.4/release.yaml`
+```
+kubectl apply -f https://github.com/jquad-group/pipeline-trigger-operator/releases/latest/download/release.yaml
+```
 
 The operator is installed in the `pipeline-trigger-operator-system` namespace. 
 
