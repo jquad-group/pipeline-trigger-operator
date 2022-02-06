@@ -36,6 +36,15 @@ type Pipeline struct {
 	MaxHistory int64 `json:"maxHistory"`
 }
 
+const (
+	pipelineTriggerLabel        string = "pipeline.jquad.rocks/pipelinetrigger"
+	pipelineTriggerBranchLabel  string = "pipeline.jquad.rocks/branch"
+	pipelineTriggerCommitLabel  string = "pipeline.jquad.rocks/commit"
+	branchPositionInLatestEvent int    = 0
+	commitPositionInLatestEvent int    = 1
+	latestEventDelimeter        string = "/"
+)
+
 func (pipeline Pipeline) CreatePipelineRef() *tektondevv1.PipelineRef {
 	return &tektondevv1.PipelineRef{
 		Name: pipeline.Name,
@@ -68,7 +77,7 @@ func (pipeline Pipeline) CreatePipelineRun(ctx context.Context, req ctrl.Request
 		ObjectMeta: v1.ObjectMeta{
 			GenerateName: pipelineTrigger.Name + "-",
 			Namespace:    pipelineTrigger.Namespace,
-			Labels:       setLabel(pipelineTrigger.Name + "-" + strings.ReplaceAll(latestEvent, "/", "-")),
+			Labels:       setLabel(pipelineTrigger.Name, strings.Split(latestEvent, latestEventDelimeter)[branchPositionInLatestEvent], strings.Split(latestEvent, latestEventDelimeter)[commitPositionInLatestEvent]),
 		},
 		Spec: tektondevv1.PipelineRunSpec{
 			ServiceAccountName: pipeline.SericeAccountName,
@@ -99,7 +108,12 @@ func (pipeline Pipeline) GetSuccessfulPipelineRuns(ctx context.Context, req ctrl
 
 	// the status is empty during the first reconciliation
 	if len(pipelineTrigger.Status.Conditions) > 0 {
-		opts := v1.ListOptions{LabelSelector: "pipeline.jquad.rocks/pipelinetrigger=" + pipelineTrigger.Name + "-" + strings.ReplaceAll(pipelineTrigger.Status.LatestEvent, "/", "-")}
+		branchName := strings.Split(pipelineTrigger.Status.LatestEvent, latestEventDelimeter)[branchPositionInLatestEvent]
+		commit := strings.Split(pipelineTrigger.Status.LatestEvent, latestEventDelimeter)[commitPositionInLatestEvent]
+		opts := v1.ListOptions{LabelSelector: pipelineTriggerLabel + "=" + pipelineTrigger.Name +
+			"," + pipelineTriggerBranchLabel + "=" + branchName +
+			"," + pipelineTriggerCommitLabel + "=" + commit,
+		}
 		pipelineRunList, err := tektonClient.TektonV1beta1().PipelineRuns(pipelineTrigger.Namespace).List(ctx, opts)
 
 		var successfulRuns []tektondevv1.PipelineRun
@@ -135,8 +149,12 @@ func (pipeline Pipeline) GetFailedPipelineRuns(ctx context.Context, req ctrl.Req
 
 	// the status is empty during the first reconciliation
 	if len(pipelineTrigger.Status.Conditions) > 0 {
-		opts := v1.ListOptions{LabelSelector: "pipeline.jquad.rocks/pipelinetrigger=" + pipelineTrigger.Name + "-" + strings.ReplaceAll(pipelineTrigger.Status.LatestEvent, "/", "-")}
-
+		branchName := strings.Split(pipelineTrigger.Status.LatestEvent, latestEventDelimeter)[branchPositionInLatestEvent]
+		commit := strings.Split(pipelineTrigger.Status.LatestEvent, latestEventDelimeter)[commitPositionInLatestEvent]
+		opts := v1.ListOptions{LabelSelector: pipelineTriggerLabel + "=" + pipelineTrigger.Name +
+			"," + pipelineTriggerBranchLabel + "=" + branchName +
+			"," + pipelineTriggerCommitLabel + "=" + commit,
+		}
 		pipelineRunList, err := tektonClient.TektonV1beta1().PipelineRuns(pipelineTrigger.Namespace).List(ctx, opts)
 
 		var failedRuns []tektondevv1.PipelineRun
@@ -160,6 +178,10 @@ func (pipeline Pipeline) GetFailedPipelineRuns(ctx context.Context, req ctrl.Req
 
 }
 
-func setLabel(name string) map[string]string {
-	return map[string]string{"pipeline.jquad.rocks/pipelinetrigger": name}
+func setLabel(name string, branch string, commit string) map[string]string {
+	return map[string]string{
+		pipelineTriggerLabel:       name,
+		pipelineTriggerBranchLabel: branch,
+		pipelineTriggerCommitLabel: commit,
+	}
 }
