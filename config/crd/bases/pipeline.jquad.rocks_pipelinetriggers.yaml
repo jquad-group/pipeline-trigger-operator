@@ -91,7 +91,6 @@ spec:
                 - maxFailedRetries
                 - maxHistory
                 - name
-                - securityContext
                 - serviceAccountName
                 - workspace
                 type: object

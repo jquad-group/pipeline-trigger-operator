@@ -171,7 +171,8 @@ func (r *PipelineTriggerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	foundPipelineRun := &tektondevv1.PipelineRun{}
 	pipelineRunError := r.Get(ctx, types.NamespacedName{Name: pipelineTrigger.Status.LatestPipelineRun, Namespace: pipelineTrigger.Namespace}, foundPipelineRun)
 	if pipelineRunError != nil {
-		log.Error(pipelineRunError, "Cannot get PipelineRun resource")
+		// pipelinerun was deleted from the user, requeue and create a new one
+		return r.ManageErrorWithRequeue(ctx, &pipelineTrigger, pipelineRunError, req)
 	}
 	// Checks wheter the PipelineRun was Successful or not
 	if isPipelineRunSuccessful(foundPipelineRun) {
@@ -543,6 +544,7 @@ func (r *PipelineTriggerReconciler) ManageErrorWithRequeue(context context.Conte
 	}
 	r.recorder.Event(obj, "Warning", "ProcessingError", issue.Error())
 
+	obj.Status.LatestPipelineRun = ""
 	condition := metav1.Condition{
 		Type:               apis.ReconcileError,
 		LastTransitionTime: metav1.Now(),

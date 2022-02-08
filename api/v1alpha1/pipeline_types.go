@@ -26,7 +26,7 @@ type Pipeline struct {
 	// +kubebuilder:validation:Required
 	Workspace Workspace `json:"workspace"`
 
-	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Optional
 	SecurityContext SecurityContext `json:"securityContext"`
 
 	// +kubebuilder:validation:Maximum=10
