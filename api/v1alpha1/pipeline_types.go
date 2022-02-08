@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/jquad-group/pipeline-trigger-operator/pkg/meta"
+	"github.com/tektoncd/pipeline/pkg/apis/pipeline/pod"
 	tektondevv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
 	clientsetversioned "github.com/tektoncd/pipeline/pkg/client/clientset/versioned"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -24,6 +25,9 @@ type Pipeline struct {
 
 	// +kubebuilder:validation:Required
 	Workspace Workspace `json:"workspace"`
+
+	// +kubebuilder:validation:Required
+	SecurityContext SecurityContext `json:"securityContext"`
 
 	// +kubebuilder:validation:Maximum=10
 	// +kubebuilder:validation:Minimum=1
@@ -85,6 +89,9 @@ func (pipeline Pipeline) CreatePipelineRun(ctx context.Context, req ctrl.Request
 			Params:             pipeline.CreateParams(pipelineTrigger, latestEvent),
 			Workspaces: []tektondevv1.WorkspaceBinding{
 				pipeline.Workspace.CreateWorkspaceBinding(),
+			},
+			PodTemplate: &pod.Template{
+				SecurityContext: pipeline.SecurityContext.CreatePodSecurityContext(),
 			},
 		},
 	}

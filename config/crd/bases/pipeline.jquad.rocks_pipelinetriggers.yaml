@@ -63,6 +63,18 @@ spec:
                     type: integer
                   name:
                     type: string
+                  securityContext:
+                    properties:
+                      fsGroup:
+                        format: int64
+                        type: integer
+                      runAsGroup:
+                        format: int64
+                        type: integer
+                      runAsUser:
+                        format: int64
+                        type: integer
+                    type: object
                   serviceAccountName:
                     type: string
                   workspace:
@@ -79,6 +91,7 @@ spec:
                 - maxFailedRetries
                 - maxHistory
                 - name
+                - securityContext
                 - serviceAccountName
                 - workspace
                 type: object
@@ -180,10 +193,6 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
-              currentPipelineRetry:
-                description: The current Pipeline Run failed retry
-                format: int64
-                type: integer
               latestEvent:
                 description: The event received from the Git Repository or Image Policy
                 type: string
