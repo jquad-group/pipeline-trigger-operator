@@ -49,10 +49,7 @@ type PipelineTriggerSpec struct {
 // PipelineTriggerStatus defines the observed state of PipelineTrigger
 type PipelineTriggerStatus struct {
 	// The event received from the Git Repository or Image Policy
-	LatestEvent string `json:"latestEvent,omitempty"`
-
-	// The name of the latest Pipeline Run resource for the received latest event
-	LatestPipelineRun string `json:"latestPipelineRun,omitempty"`
+	LatestEvent Event `json:"latestEvent,omitempty"`
 
 	// +patchMergeKey=type
 	// +patchStrategy=merge

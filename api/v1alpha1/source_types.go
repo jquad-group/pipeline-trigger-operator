@@ -2,7 +2,7 @@ package v1alpha1
 
 type Source struct {
 	// Kind of the source refernce.
-	// +kubebuilder:validation:Enum=ImagePolicy;GitRepository
+	// +kubebuilder:validation:Enum=ImagePolicy;GitRepository;PullRequest
 	// +kubebuilder:validation:Required
 	Kind string `json:"kind"`
 

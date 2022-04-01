@@ -60,6 +60,22 @@ rules:
   - patch
   - update
 - apiGroups:
+  - pipeline.jquad.rocks
+  resources:
+  - pullrequests
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - pipeline.jquad.rocks
+  resources:
+  - pullrequests/status
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
   - source.toolkit.fluxcd.io
   resources:
   - gitrepositories
