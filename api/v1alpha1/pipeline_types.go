@@ -48,28 +48,28 @@ func (pipeline *Pipeline) createPipelineRef() *tektondevv1.PipelineRef {
 	}
 }
 
-func (pipeline *Pipeline) createParams() []tektondevv1.Param {
+func (pipeline *Pipeline) createParams(currentBranch Branch) []tektondevv1.Param {
 
 	var pipelineParams []tektondevv1.Param
 	for paramNr := 0; paramNr < len(pipeline.InputParams); paramNr++ {
-		pipelineParams = append(pipelineParams, pipeline.InputParams[paramNr].CreateParam())
+		pipelineParams = append(pipelineParams, pipeline.InputParams[paramNr].CreateParam(currentBranch))
 	}
 	return pipelineParams
 }
 
-func (pipeline *Pipeline) CreatePipelineRunResource(pipelineTrigger PipelineTrigger, labels map[string]string) *tektondevv1.PipelineRun {
+func (pipeline *Pipeline) CreatePipelineRunResourceForBranch(pipelineTrigger PipelineTrigger, currentBranch Branch, labels map[string]string) *tektondevv1.PipelineRun {
 	pipelineRunTypeMeta := meta.TypeMeta("PipelineRun", "tekton.dev/v1beta1")
 	pr := &tektondevv1.PipelineRun{
 		TypeMeta: pipelineRunTypeMeta,
 		ObjectMeta: v1.ObjectMeta{
-			GenerateName: pipelineTrigger.Name + "-",
+			GenerateName: currentBranch.Rewrite() + "-",
 			Namespace:    pipelineTrigger.Namespace,
 			Labels:       labels,
 		},
 		Spec: tektondevv1.PipelineRunSpec{
 			ServiceAccountName: pipelineTrigger.Spec.Pipeline.SericeAccountName,
 			PipelineRef:        pipeline.createPipelineRef(),
-			Params:             pipeline.createParams(),
+			Params:             pipeline.createParams(currentBranch),
 			Workspaces: []tektondevv1.WorkspaceBinding{
 				pipelineTrigger.Spec.Pipeline.Workspace.CreateWorkspaceBinding(),
 			},
@@ -81,7 +81,7 @@ func (pipeline *Pipeline) CreatePipelineRunResource(pipelineTrigger PipelineTrig
 	return pr
 }
 
-func (pipelineTrigger *PipelineTrigger) StartPipelineRun(pr *tektondevv1.PipelineRun, ctx context.Context, req ctrl.Request, newEvent *Event, r *runtime.Scheme) string {
+func (pipelineTrigger *PipelineTrigger) StartPipelineRun(pr *tektondevv1.PipelineRun, ctx context.Context, req ctrl.Request, r *runtime.Scheme) string {
 	log := log.FromContext(ctx)
 
 	cfg := ctrl.GetConfigOrDie()
@@ -116,10 +116,10 @@ func (pipelineTrigger *PipelineTrigger) GetPipelineRunsByLabel(ctx context.Conte
 	}
 
 	// the status is empty during the first reconciliation
-	if len(pipelineTrigger.Status.LatestEvent.Branches.Branches) > 0 {
+	if len(pipelineTrigger.Status.Branches.Branches) > 0 {
 		var pipelineRunsByLabel []tektondevv1.PipelineRun
-		for key := range pipelineTrigger.Status.LatestEvent.Branches.Branches {
-			tempBranch := pipelineTrigger.Status.LatestEvent.Branches.Branches[key]
+		for key := range pipelineTrigger.Status.Branches.Branches {
+			tempBranch := pipelineTrigger.Status.Branches.Branches[key]
 			opts := v1.ListOptions{LabelSelector: tempBranch.GenerateBranchLabelsAsString()}
 			pipelineRunList, err := tektonClient.TektonV1beta1().PipelineRuns(pipelineTrigger.Namespace).List(ctx, opts)
 			if err != nil {

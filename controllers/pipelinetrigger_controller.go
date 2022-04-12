@@ -115,31 +115,22 @@ func (r *PipelineTriggerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	}
 
 	// Get the Latest Source Event
-	newEvent, err := sourceSubscriber.GetLatestEvent(ctx, pipelineTrigger, r.Client, req)
+	gotNewEvent, err := sourceSubscriber.GetLatestEvent(ctx, &pipelineTrigger, r.Client, req)
 	if err != nil {
 		return r.ManageError(ctx, &pipelineTrigger, req, err)
 	}
 
-	// Get the list of pipelineruns for this pipelinetrigger
-	/*
-		successfulPipelineRunList, listFailed := pipelineTrigger.Spec.Pipeline.GetSuccessfulPipelineRuns(ctx, req, pipelineTrigger)
-		if listFailed != nil {
-			log.Error(listFailed, "Failed to list PipelineRuns in ", pipelineTrigger.Namespace, " with label ", pipelineTrigger.Name)
-		}
-		failedPipelineRunList, listFailed := pipelineTrigger.Spec.Pipeline.GetFailedPipelineRuns(ctx, req, pipelineTrigger)
-		if listFailed != nil {
-			log.Error(listFailed, "Failed to list PipelineRuns in ", pipelineTrigger.Namespace, " with label ", pipelineTrigger.Name)
-		}
-	*/
+	if gotNewEvent {
+		// Update the status conditions
+		r.Status().Update(ctx, &pipelineTrigger)
+		return ctrl.Result{RequeueAfter: time.Second * 10}, nil
+	}
 
-	// Get updated events
-	eventDifferences := pipelineTrigger.Status.LatestEvent.GetUpdates(newEvent)
-	eD := eventDifferences.ToString()
-	prs := sourceSubscriber.CreatePipelineRunResource(&pipelineTrigger, eventDifferences)
-	for diffCnt := 0; diffCnt < eventDifferences.GetSize(); diffCnt++ {
-		newVersionMsg := "Source " + pipelineTrigger.Spec.Source.Name + " in namespace " + pipelineTrigger.Namespace + " got new event " + eD[diffCnt]
+	prs := sourceSubscriber.CreatePipelineRunResource(&pipelineTrigger)
+	for pipelineRunCnt := 0; pipelineRunCnt < len(prs); pipelineRunCnt++ {
+		instanceName := pipelineTrigger.StartPipelineRun(prs[pipelineRunCnt], ctx, req, r.Scheme)
+		newVersionMsg := "Started the pipeline " + instanceName + " in namespace " + pipelineTrigger.Namespace
 		r.recorder.Event(&pipelineTrigger, core.EventTypeNormal, "Info", newVersionMsg)
-		pipelineTrigger.StartPipelineRun(prs[diffCnt], ctx, req, &eventDifferences, r.Scheme)
 	}
 
 	_, errList := sourceSubscriber.GetPipelineRunsByLabel(ctx, req, &pipelineTrigger)
@@ -152,77 +143,6 @@ func (r *PipelineTriggerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	}
 
 	r.Status().Update(ctx, &pipelineTrigger)
-
-	/*
-		// check if there are new events from the pullrequests, gitrepositories or imagepolicies
-		if eventDifferences.GetSize() == 0 {
-			condition := pipelineTrigger.GetLastCondition()
-			if condition.Type == apis.ReconcileSuccess {
-				// defined state is the same as the cluster state
-				return ctrl.Result{}, nil
-			}
-	*/
-	/*
-		if condition.Type == apis.ReconcileError && len(failedPipelineRunList.Items) >= int(pipelineTrigger.Spec.Pipeline.MaxFailedRetries) {
-			// defined state differs from cluster state, pipelinerun failed, cannot recover and thus not requeueing
-			return ctrl.Result{}, nil
-		}
-	*/
-	/*
-		} else {
-			eD := eventDifferences.ToString()
-			prs := sourceSubscriber.CreatePipelineRunResource(pipelineTrigger, eventDifferences)
-			for diffCnt := 0; diffCnt < eventDifferences.GetSize(); diffCnt++ {
-				newVersionMsg := "Source " + pipelineTrigger.Spec.Source.Name + " in namespace " + pipelineTrigger.Namespace + " got new event " + eD[diffCnt]
-				r.recorder.Event(&pipelineTrigger, core.EventTypeNormal, "Info", newVersionMsg)
-				pipelineTrigger.StartPipelineRun(prs[diffCnt], ctx, req, &eventDifferences, r.Scheme)
-				fmt.Println(prs[diffCnt].Labels)
-			}
-	*/
-
-	/*
-		// check if the number of succesfull pipelines < MaxHistory, and start a new pipeline
-		if (len(successfulPipelineRunList.Items) + len(eD)) < int(pipelineTrigger.Spec.Pipeline.MaxHistory) {
-			//pipelineTrigger.Spec.Pipeline.CreatePipelineRunFromEvent(ctx, req, pipelineTrigger, &eventDifferences, r.Scheme)
-		}
-	*/
-	/*
-		if (len(successfulPipelineRunList.Items) + len(eD)) >= int(pipelineTrigger.Spec.Pipeline.MaxHistory) {
-			// if pipelineruns > MaxHistory delete one pipelinerun, return and requeue
-			r.deleteRandomPipelineRun(ctx, successfulPipelineRunList)
-			return r.ManageUnknownWithRequeue(ctx, &pipelineTrigger, req)
-		}
-		pipelineTrigger.Status.LatestEvent.AddOrReplace(eventDifferences)
-
-		return r.ManagePipelineRunCreatedStatus(ctx, &pipelineTrigger, req)
-	*/
-
-	//}
-
-	// Set the new events to the pipelinetrigger's status
-	//pipelineTrigger.Status.LatestEvent.AddOrReplace(newEvent)
-
-	// Finds the started PipelineRun
-
-	/*
-		foundPipelineRun := &tektondevv1.PipelineRun{}
-		pipelineRunError := r.Get(ctx, types.NamespacedName{Name: pipelineTrigger.Status.LatestPipelineRun, Namespace: pipelineTrigger.Namespace}, foundPipelineRun)
-		if pipelineRunError != nil {
-			log.Error(pipelineRunError, "Cannot get PipelineRun resource")
-		}
-
-		// Checks wheter the PipelineRun was Successful or not
-		if isPipelineRunSuccessful(foundPipelineRun) {
-			return r.ManagePipelineRunSucceededStatus(ctx, &pipelineTrigger, req)
-		} else if isPipelineRunFailure(foundPipelineRun) {
-			var err error
-			return r.ManageError(ctx, &pipelineTrigger, req, err)
-			//return r.ManagePipelineRunRetriedStatus(ctx, &pipelineTrigger, req)
-		} else {
-			// Requeue if the PipelineRun is still running
-			return r.ManageUnknownWithRequeue(ctx, &pipelineTrigger, req)
-		}
-	*/
 
 	log.Info("test")
 
@@ -278,7 +198,7 @@ func (r *PipelineTriggerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		// Extract the PipelineRun name from the PipelineTrigger Spec, if one is provided
 		pipelineTrigger := rawObj.(*pipelinev1alpha1.PipelineTrigger)
 		var result []string
-		for _, branch := range pipelineTrigger.Status.LatestEvent.Branches.Branches {
+		for _, branch := range pipelineTrigger.Status.Branches.Branches {
 			result = append(result, branch.LatestPipelineRun)
 		}
 		if len(result) == 0 {
@@ -320,11 +240,13 @@ func (r *PipelineTriggerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		).
 		Watches(
 			&source.Kind{Type: &tektondevv1.PipelineRun{}},
-			&handler.EnqueueRequestForOwner{
-				IsController: true,
-				OwnerType:    &pipelinev1alpha1.PipelineTrigger{},
-			},
-			//handler.EnqueueRequestsFromMapFunc(r.findObjectsForPipelineRun),
+			/*
+				&handler.EnqueueRequestForOwner{
+					IsController: true,
+					OwnerType:    &pipelinev1alpha1.PipelineTrigger{},
+				},
+			*/
+			handler.EnqueueRequestsFromMapFunc(r.findObjectsForPipelineRun),
 			//builder.WithPredicates(predicate.ResourceVersionChangedPredicate{}),
 		).
 		Complete(r)

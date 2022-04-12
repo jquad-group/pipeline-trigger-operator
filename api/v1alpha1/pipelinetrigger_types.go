@@ -22,6 +22,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+const (
+	pipelineTriggerLabelKey   string = "pipeline.jquad.rocks"
+	pipelineTriggerLabelValue string = "pipelinetrigger"
+)
+
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
 
@@ -48,9 +53,16 @@ type PipelineTriggerSpec struct {
 
 // PipelineTriggerStatus defines the observed state of PipelineTrigger
 type PipelineTriggerStatus struct {
-	// The event received from the Git Repository or Image Policy
-	LatestEvent Event `json:"latestEvent,omitempty"`
+	// +kubebuilder:validation:Optional
+	ImagePolicy ImagePolicy `json:"imagePolicy,omitempty"`
 
+	// +kubebuilder:validation:Optional
+	GitRepository GitRepository `json:"gitRepository,omitempty"`
+
+	// +kubebuilder:validation:Optional
+	Branches Branches `json:"branches,omitempty"`
+
+	// https://github.com/kubernetes-sigs/cli-utils/blob/master/pkg/kstatus/README.md
 	// +patchMergeKey=type
 	// +patchStrategy=merge
 	// +listType=map
@@ -108,7 +120,7 @@ func (m *PipelineTrigger) AddOrReplaceCondition(c metav1.Condition) {
 			found = true
 		}
 	}
-	if found == false {
+	if !found {
 		m.Status.Conditions = append(m.Status.Conditions, c)
 	}
 }

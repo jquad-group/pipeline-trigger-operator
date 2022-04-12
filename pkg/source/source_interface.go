@@ -13,8 +13,8 @@ import (
 type SourceSubscriber interface {
 	Subscribes(pipelineTrigger pipelinev1alpha1.PipelineTrigger) error
 	Exists(ctx context.Context, pipelineTrigger pipelinev1alpha1.PipelineTrigger, client client.Client, req ctrl.Request) error
-	GetLatestEvent(ctx context.Context, pipelineTrigger pipelinev1alpha1.PipelineTrigger, client client.Client, req ctrl.Request) (pipelinev1alpha1.Event, error)
-	CreatePipelineRunResource(pipelineTrigger *pipelinev1alpha1.PipelineTrigger, newEvent pipelinev1alpha1.Event) []*tektondevv1.PipelineRun
+	GetLatestEvent(ctx context.Context, pipelineTrigger *pipelinev1alpha1.PipelineTrigger, client client.Client, req ctrl.Request) (bool, error)
+	CreatePipelineRunResource(pipelineTrigger *pipelinev1alpha1.PipelineTrigger) []*tektondevv1.PipelineRun
 	GetPipelineRunsByLabel(ctx context.Context, req ctrl.Request, pipelineTrigger *pipelinev1alpha1.PipelineTrigger) (*tektondevv1.PipelineRunList, error)
 	IsFinished(pipelineTrigger *pipelinev1alpha1.PipelineTrigger) bool
 }
