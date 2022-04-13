@@ -1,6 +1,7 @@
 package v1alpha1
 
 import (
+	"encoding/json"
 	"strings"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
@@ -26,6 +27,8 @@ type GitRepository struct {
 
 	// +kubebuilder:validation:Required
 	LatestPipelineRun string `json:"latestPipelineRun,omitempty"`
+
+	Details string `json:"details,omitempty"`
 
 	// +patchMergeKey=type
 	// +patchStrategy=merge
@@ -86,4 +89,41 @@ func (gitRepository *GitRepository) GetGitRepository(fluxGitRepository sourcev1.
 	gitRepository.RepositoryName = getGitRepositoryName(fluxGitRepository)
 	gitRepository.BranchName = getBranchName(fluxGitRepository)
 	gitRepository.CommitId = getCommitId(fluxGitRepository)
+}
+
+func (gitRepository *GitRepository) AddOrReplaceCondition(c metav1.Condition) {
+	found := false
+	for i, condition := range gitRepository.Conditions {
+		if c.Type == condition.Type {
+			gitRepository.Conditions[i] = c
+			found = true
+		}
+	}
+	if !found {
+		gitRepository.Conditions = append(gitRepository.Conditions, c)
+	}
+}
+
+func (gitRepository *GitRepository) GetCondition(conditionType string) (metav1.Condition, bool) {
+	for _, condition := range gitRepository.Conditions {
+		if condition.Type == conditionType {
+			return condition, true
+		}
+	}
+	return metav1.Condition{}, false
+}
+
+func (gitRepository *GitRepository) Rewrite() string {
+	// Replaces branch names from feature/newlogin to feature-newlogin
+	return strings.ReplaceAll(gitRepository.BranchName, "/", "-")
+}
+
+func (gitRepository *GitRepository) GenerateDetails() {
+	tempGitRepository := &GitRepository{
+		BranchName:     gitRepository.BranchName,
+		CommitId:       gitRepository.CommitId,
+		RepositoryName: gitRepository.RepositoryName,
+	}
+	data, _ := json.Marshal(tempGitRepository)
+	gitRepository.Details = string(data)
 }

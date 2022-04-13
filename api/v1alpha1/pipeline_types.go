@@ -57,6 +57,24 @@ func (pipeline *Pipeline) createParams(currentBranch Branch) []tektondevv1.Param
 	return pipelineParams
 }
 
+func (pipeline *Pipeline) createParamsGitRepository(gitRepository GitRepository) []tektondevv1.Param {
+
+	var pipelineParams []tektondevv1.Param
+	for paramNr := 0; paramNr < len(pipeline.InputParams); paramNr++ {
+		pipelineParams = append(pipelineParams, pipeline.InputParams[paramNr].CreateParamGitRepository(gitRepository))
+	}
+	return pipelineParams
+}
+
+func (pipeline *Pipeline) createParamsImagePolicy(imagePolicy ImagePolicy) []tektondevv1.Param {
+
+	var pipelineParams []tektondevv1.Param
+	for paramNr := 0; paramNr < len(pipeline.InputParams); paramNr++ {
+		pipelineParams = append(pipelineParams, pipeline.InputParams[paramNr].CreateParamImage(imagePolicy))
+	}
+	return pipelineParams
+}
+
 func (pipeline *Pipeline) CreatePipelineRunResourceForBranch(pipelineTrigger PipelineTrigger, currentBranch Branch, labels map[string]string) *tektondevv1.PipelineRun {
 	pipelineRunTypeMeta := meta.TypeMeta("PipelineRun", "tekton.dev/v1beta1")
 	pr := &tektondevv1.PipelineRun{
@@ -70,6 +88,54 @@ func (pipeline *Pipeline) CreatePipelineRunResourceForBranch(pipelineTrigger Pip
 			ServiceAccountName: pipelineTrigger.Spec.Pipeline.SericeAccountName,
 			PipelineRef:        pipeline.createPipelineRef(),
 			Params:             pipeline.createParams(currentBranch),
+			Workspaces: []tektondevv1.WorkspaceBinding{
+				pipelineTrigger.Spec.Pipeline.Workspace.CreateWorkspaceBinding(),
+			},
+			PodTemplate: &pod.Template{
+				SecurityContext: pipelineTrigger.Spec.Pipeline.SecurityContext.CreatePodSecurityContext(),
+			},
+		},
+	}
+	return pr
+}
+
+func (pipeline *Pipeline) CreatePipelineRunResourceForGit(pipelineTrigger PipelineTrigger) *tektondevv1.PipelineRun {
+	pipelineRunTypeMeta := meta.TypeMeta("PipelineRun", "tekton.dev/v1beta1")
+	pr := &tektondevv1.PipelineRun{
+		TypeMeta: pipelineRunTypeMeta,
+		ObjectMeta: v1.ObjectMeta{
+			GenerateName: pipelineTrigger.Status.GitRepository.Rewrite() + "-",
+			Namespace:    pipelineTrigger.Namespace,
+			Labels:       pipelineTrigger.Status.GitRepository.GenerateGitRepositoryLabelsAsHash(),
+		},
+		Spec: tektondevv1.PipelineRunSpec{
+			ServiceAccountName: pipelineTrigger.Spec.Pipeline.SericeAccountName,
+			PipelineRef:        pipeline.createPipelineRef(),
+			Params:             pipeline.createParamsGitRepository(pipelineTrigger.Status.GitRepository),
+			Workspaces: []tektondevv1.WorkspaceBinding{
+				pipelineTrigger.Spec.Pipeline.Workspace.CreateWorkspaceBinding(),
+			},
+			PodTemplate: &pod.Template{
+				SecurityContext: pipelineTrigger.Spec.Pipeline.SecurityContext.CreatePodSecurityContext(),
+			},
+		},
+	}
+	return pr
+}
+
+func (pipeline *Pipeline) CreatePipelineRunResourceForImage(pipelineTrigger PipelineTrigger) *tektondevv1.PipelineRun {
+	pipelineRunTypeMeta := meta.TypeMeta("PipelineRun", "tekton.dev/v1beta1")
+	pr := &tektondevv1.PipelineRun{
+		TypeMeta: pipelineRunTypeMeta,
+		ObjectMeta: v1.ObjectMeta{
+			GenerateName: pipelineTrigger.Status.ImagePolicy.Rewrite() + "-",
+			Namespace:    pipelineTrigger.Namespace,
+			Labels:       pipelineTrigger.Status.ImagePolicy.GenerateImagePolicyLabelsAsHash(),
+		},
+		Spec: tektondevv1.PipelineRunSpec{
+			ServiceAccountName: pipelineTrigger.Spec.Pipeline.SericeAccountName,
+			PipelineRef:        pipeline.createPipelineRef(),
+			Params:             pipeline.createParamsImagePolicy(pipelineTrigger.Status.ImagePolicy),
 			Workspaces: []tektondevv1.WorkspaceBinding{
 				pipelineTrigger.Spec.Pipeline.Workspace.CreateWorkspaceBinding(),
 			},
@@ -141,90 +207,3 @@ func (pipelineTrigger *PipelineTrigger) GetPipelineRunsByLabel(ctx context.Conte
 		return &pipelineRunsList, err
 	}
 }
-
-/*
-
-func (pipeline *Pipeline) GetSuccessfulPipelineRuns(ctx context.Context, req ctrl.Request, pipelineTrigger PipelineTrigger) (*tektondevv1.PipelineRunList, error) {
-	log := log.FromContext(ctx)
-
-	cfg := ctrl.GetConfigOrDie()
-
-	tektonClient, err := clientsetversioned.NewForConfig(cfg)
-
-	if err != nil {
-		log.Info("Cannot create tekton client.")
-	}
-
-	// the status is empty during the first reconciliation
-	if len(pipelineTrigger.Status.LatestEvent.Branches.Branches) > 0 {
-		var successfulRuns []tektondevv1.PipelineRun
-		for key, _ := range pipelineTrigger.Status.LatestEvent.Branches.Branches {
-			tempBranch := pipelineTrigger.Status.LatestEvent.Branches.Branches[key]
-			opts := v1.ListOptions{LabelSelector: tempBranch.GenerateBranchLabelsAsString()}
-			pipelineRunList, err := tektonClient.TektonV1beta1().PipelineRuns(pipelineTrigger.Namespace).List(ctx, opts)
-			if err != nil {
-				log.Info("Cannot get Successful PipelineRuns.")
-			}
-
-			for i := range pipelineRunList.Items {
-				item := pipelineRunList.Items[i]
-
-				if len(item.Status.Conditions) > 0 {
-					if string(item.Status.Conditions[0].Reason) == "Succeeded" {
-						successfulRuns = append(successfulRuns, item)
-					}
-				}
-			}
-		}
-
-		var successfulRunsList tektondevv1.PipelineRunList
-		successfulRunsList.Items = successfulRuns
-		return &successfulRunsList, err
-	} else {
-		var successfulRunsList tektondevv1.PipelineRunList
-		return &successfulRunsList, err
-	}
-}
-
-func (pipeline *Pipeline) GetFailedPipelineRuns(ctx context.Context, req ctrl.Request, pipelineTrigger PipelineTrigger) (*tektondevv1.PipelineRunList, error) {
-	log := log.FromContext(ctx)
-
-	cfg := ctrl.GetConfigOrDie()
-
-	tektonClient, err := clientsetversioned.NewForConfig(cfg)
-
-	if err != nil {
-		log.Info("Cannot create tekton client.")
-	}
-
-	// the status is empty during the first reconciliation
-	if len(pipelineTrigger.Status.LatestEvent.Branches.Branches) > 0 {
-		var failedRuns []tektondevv1.PipelineRun
-		for key, _ := range pipelineTrigger.Status.LatestEvent.Branches.Branches {
-			tempBranch := pipelineTrigger.Status.LatestEvent.Branches.Branches[key]
-			opts := v1.ListOptions{LabelSelector: tempBranch.GenerateBranchLabelsAsString()}
-			pipelineRunList, err := tektonClient.TektonV1beta1().PipelineRuns(pipelineTrigger.Namespace).List(ctx, opts)
-			if err != nil {
-				log.Info("Cannot get Failed PipelineRuns.")
-			}
-
-			for i := range pipelineRunList.Items {
-				item := pipelineRunList.Items[i]
-
-				if len(item.Status.Conditions) > 0 {
-					if string(item.Status.Conditions[0].Reason) == "Failed" {
-						failedRuns = append(failedRuns, item)
-					}
-				}
-			}
-		}
-		var failedRunsList tektondevv1.PipelineRunList
-		failedRunsList.Items = failedRuns
-		return &failedRunsList, err
-	} else {
-		var failedRunsList tektondevv1.PipelineRunList
-		return &failedRunsList, err
-	}
-
-}
-*/

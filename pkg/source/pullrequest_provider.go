@@ -31,17 +31,12 @@ func (pullrequestSubscriber PullrequestSubscriber) Subscribes(pipelineTrigger pi
 }
 
 func (pullrequestSubscriber PullrequestSubscriber) Exists(ctx context.Context, pipelineTrigger pipelinev1alpha1.PipelineTrigger, client client.Client, req ctrl.Request) error {
-	var err error
-	if pipelineTrigger.Spec.Source.Kind == "PullRequest" {
-		foundSource := &pullrequestv1alpha1.PullRequest{}
-		err = client.Get(ctx, types.NamespacedName{Name: pipelineTrigger.Spec.Source.Name, Namespace: pipelineTrigger.Namespace}, foundSource)
-		if err != nil {
-			return err
-		} else {
-			return nil
-		}
-	} else {
+	foundSource := &pullrequestv1alpha1.PullRequest{}
+	err := client.Get(ctx, types.NamespacedName{Name: pipelineTrigger.Spec.Source.Name, Namespace: pipelineTrigger.Namespace}, foundSource)
+	if err != nil {
 		return err
+	} else {
+		return nil
 	}
 }
 
@@ -56,7 +51,6 @@ func (pullrequestSubscriber PullrequestSubscriber) GetLatestEvent(ctx context.Co
 	if len(pipelineTrigger.Status.Branches.Branches) > 0 {
 		// add all new branches to the status of the pipelinetrigger
 		for key, value := range branches.Branches {
-			//tempBranch := branches.Branches[key]
 			_, found := pipelineTrigger.Status.Branches.Branches[key]
 			if !found {
 				// add the branch
@@ -76,7 +70,6 @@ func (pullrequestSubscriber PullrequestSubscriber) GetLatestEvent(ctx context.Co
 		pipelineTrigger.Status.Branches = branches
 		gotNewEvent = true
 	}
-	//pipelineTrigger.Status.LatestEvent.AddOrReplace(newEvent)
 	return gotNewEvent, nil
 }
 

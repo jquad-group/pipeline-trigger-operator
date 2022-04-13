@@ -42,7 +42,7 @@ type PipelineTrigger struct {
 
 // PipelineTriggerSpec defines the desired state of PipelineTrigger
 type PipelineTriggerSpec struct {
-	// Source points at the object specifying the Image Policy or Git Repository found
+	// Source points at the object specifying the Image Policy, Git Repository or Pull Request found
 	// +kubebuilder:validation:Required
 	Source Source `json:"source"`
 

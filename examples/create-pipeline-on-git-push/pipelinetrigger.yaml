@@ -24,8 +24,8 @@ spec:
       - name: "repo-url"
         value: "https://github.com/jquad-group/microservice.git"
       - name: "branch-name"
-        value: $(branch)
+        value: $.branchName
       - name: "commitid"
-        value: $(commit)
+        value: $.commitId
       - name: "imageLocation"
         value: "docker.io/org/image"

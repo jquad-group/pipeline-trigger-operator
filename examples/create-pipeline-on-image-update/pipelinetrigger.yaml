@@ -22,4 +22,4 @@ spec:
       - name: "branch-name"
         value: "main"
       - name: "imageLocation"
-        value: "ghcr.io/jquad-group/microservice"
+        value: $.repositoryName

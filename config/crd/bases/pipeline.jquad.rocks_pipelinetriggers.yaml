@@ -95,8 +95,8 @@ spec:
                 - workspace
                 type: object
               source:
-                description: Source points at the object specifying the Image Policy
-                  or Git Repository found
+                description: Source points at the object specifying the Image Policy,
+                  Git Repository or Pull Request found
                 properties:
                   kind:
                     description: Kind of the source refernce.
@@ -373,6 +373,8 @@ spec:
                     x-kubernetes-list-map-keys:
                     - type
                     x-kubernetes-list-type: map
+                  details:
+                    type: string
                   latestPipelineRun:
                     type: string
                   repositoryName:
@@ -455,6 +457,8 @@ spec:
                     x-kubernetes-list-map-keys:
                     - type
                     x-kubernetes-list-type: map
+                  details:
+                    type: string
                   imageName:
                     type: string
                   imageVersion:

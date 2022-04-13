@@ -1,6 +1,7 @@
 package v1alpha1
 
 import (
+	"encoding/json"
 	"strings"
 
 	imagereflectorv1 "github.com/fluxcd/image-reflector-controller/api/v1beta1"
@@ -9,7 +10,7 @@ import (
 
 const (
 	repositoryNamePosition int    = 1
-	imageNamePosition      int    = 2
+	imageNamePosition      int    = 0
 	imageVersionPosition   int    = 1
 	imageNameDelimeter     string = "/"
 	imageVersionDelimeter  string = ":"
@@ -28,6 +29,8 @@ type ImagePolicy struct {
 
 	// +kubebuilder:validation:Required
 	LatestPipelineRun string `json:"latestPipelineRun,omitempty"`
+
+	Details string `json:"details,omitempty"`
 
 	// +patchMergeKey=type
 	// +patchStrategy=merge
@@ -76,16 +79,56 @@ func (imagePolicy *ImagePolicy) GetImagePolicy(fluxImagePolicy imagereflectorv1.
 }
 
 func getRepositoryName(fluxImagePolicy imagereflectorv1.ImagePolicy) string {
-	repositoryName := strings.Split(fluxImagePolicy.Status.LatestImage, imageNameDelimeter)[repositoryNamePosition]
+	pathSubdirSize := len(strings.Split(fluxImagePolicy.Status.LatestImage, imageNameDelimeter))
+	repositoryName := strings.Split(fluxImagePolicy.Status.LatestImage, imageNameDelimeter)[pathSubdirSize-2]
 	return repositoryName
 }
 
 func getImageName(fluxImagePolicy imagereflectorv1.ImagePolicy) string {
-	imageName := strings.Split(fluxImagePolicy.Status.LatestImage, imageNameDelimeter)[imageNamePosition]
+	pathSubdirSize := len(strings.Split(fluxImagePolicy.Status.LatestImage, imageNameDelimeter))
+	imageNameWithVersion := strings.Split(fluxImagePolicy.Status.LatestImage, imageNameDelimeter)[pathSubdirSize-1]
+	imageName := strings.Split(imageNameWithVersion, imageVersionDelimeter)[imageNamePosition]
 	return imageName
 }
 
 func getImageVersion(fluxImagePolicy imagereflectorv1.ImagePolicy) string {
-	imageName := strings.Split(fluxImagePolicy.Status.LatestImage, imageVersionDelimeter)[imageVersionPosition]
-	return imageName
+	imageVersion := strings.Split(fluxImagePolicy.Status.LatestImage, imageVersionDelimeter)[imageVersionPosition]
+	return imageVersion
+}
+
+func (imagePolicy *ImagePolicy) AddOrReplaceCondition(c metav1.Condition) {
+	found := false
+	for i, condition := range imagePolicy.Conditions {
+		if c.Type == condition.Type {
+			imagePolicy.Conditions[i] = c
+			found = true
+		}
+	}
+	if !found {
+		imagePolicy.Conditions = append(imagePolicy.Conditions, c)
+	}
+}
+
+func (imagePolicy *ImagePolicy) GetCondition(conditionType string) (metav1.Condition, bool) {
+	for _, condition := range imagePolicy.Conditions {
+		if condition.Type == conditionType {
+			return condition, true
+		}
+	}
+	return metav1.Condition{}, false
+}
+
+func (imagePolicy *ImagePolicy) Rewrite() string {
+	// Replaces branch names from feature/newlogin to feature-newlogin
+	return strings.ReplaceAll(imagePolicy.ImageName, ":", "-")
+}
+
+func (imagePolicy *ImagePolicy) GenerateDetails() {
+	tempImagePolicy := &ImagePolicy{
+		ImageName:      imagePolicy.ImageName,
+		RepositoryName: imagePolicy.RepositoryName,
+		ImageVersion:   imagePolicy.ImageVersion,
+	}
+	data, _ := json.Marshal(tempImagePolicy)
+	imagePolicy.Details = string(data)
 }
