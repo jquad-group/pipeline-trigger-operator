@@ -51,6 +51,29 @@ spec:
         value: "03da4fdbf8f3e027fb56dd0d96244c951a24f2b4" # or JSON path expression - commit id taken from the Flux Gitrepository resource
 ```
 
+## Using dynamic input parameters for the pipeline
+
+The pipeline-trigger-operator accepts json path expressions. 
+
+E.g. given the following status:
+
+```
+Status:
+  Branches:
+  Git Repository:
+    Branch Name:  main
+    Commit Id:    03da4fdbf8f3e027fb56dd0d96244c951a24f2b4
+    Details:                 {"branchName":"main","commitId":"03da4fdbf8f3e027fb56dd0d96244c951a24f2b4","repositoryName":"microservice-code-repo"}
+    Repository Name:         microservice-code-repo
+```
+the branch name can be extracted from the `Details` using the expression `$.branchName` as a input parameter for the pipeline:
+
+```
+    inputParams:
+      - name: "branch-name"
+        value: $.branchName
+```
+
 # Installation
 
 Run the following command: 
