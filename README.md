@@ -1,6 +1,6 @@
 # Pipeline Trigger Operator
 
-The Pipeline Trigger Operator listens for events from the Flux v2 `ImagePolicy` or `GitRepository` resources and creates a Tekton `PipelineRun` for a given `Pipeline` resouce.
+The Pipeline Trigger Operator listens for events from the Flux v2 `ImagePolicy`, `GitRepository` or from the pullrequest-operator `PullRequest` resources and creates a Tekton `PipelineRun` for a given `Pipeline` resouce.
 
 **Automated creation of Tekton PipelineRuns on events from Flux resources**
 
@@ -8,8 +8,9 @@ Using the automated pipeline trigger operator is based on the following resource
 1. `GitRepository` - [**Flux** resource](https://fluxcd.io/docs/components/source/gitrepositories/), configure as required
 2. `ImageRepository` - [**Flux** resource](https://fluxcd.io/docs/components/image/imagerepositories/), configure as required
 3. `ImagePolicy` - [**Flux** resource](https://fluxcd.io/docs/components/image/imagepolicies/), configure as required
-4. `Pipeline` - [**Tekton** resource](https://tekton.dev/docs/pipelines/pipelines/), configure as required
-5. `PipelineTrigger` - **PipelineTrigger* resource, configuration description in this readme
+4. `PullRequest` - [**PullRequest** resource](https://github.com/jquad-group/pullrequest-operator/), configure as required
+5. `Pipeline` - [**Tekton** resource](https://tekton.dev/docs/pipelines/pipelines/), configure as required
+6. `PipelineTrigger` - **PipelineTrigger* resource, configuration description in this readme
 
 [Short video with the components overview](https://www.youtube.com/watch?v=3TmczsYnDNc)
 
@@ -35,10 +36,6 @@ spec:
     name: build-and-push-pipeline
     # Your kubernetes service account name
     serviceAccountName: build-bot
-    # Max number of executed pipelines that should remain on the cluster
-    maxHistory: 5
-    # Number of retries to execute a pipeline
-    maxFailedRetries: 3
     # The workspace for the tekton pipeline
     workspace:
       name: workspace
@@ -49,9 +46,9 @@ spec:
       - name: "repo-url"
         value: "https://github.com/my-project.git"
       - name: "branch-name"
-        value: "main" # or "$(branch)" - branch name taken from the Flux GitRepository resource
+        value: "main" # or JSON path expression, e.g. $.imageName
       - name: "commit-id"
-        value: "03da4fdbf8f3e027fb56dd0d96244c951a24f2b4" # or "$(commit)" - commit id taken from the Flux Gitrepository resource
+        value: "03da4fdbf8f3e027fb56dd0d96244c951a24f2b4" # or JSON path expression - commit id taken from the Flux Gitrepository resource
 ```
 
 # Installation
@@ -99,17 +96,17 @@ Examples can be found in the `examples` directory of the project.
 
 ## Example 1: Build a microservice and create the microservice image on git push on the master branch 
 
-1. Create the example namespace `jq-example-namespace`. In this namespace are deployed all the examples: 
+1. Create the example namespace `jq-example-git`. In this namespace are deployed all the examples: 
 
- `kubectl create ns jq-example-namespace`
+ `kubectl create ns jq-example-git`
 
 2. Deploy the `gitrepository.yaml`. The `GitRepository` resource clones a branch for given git repository: 
 
 ```
 $ kubectl apply -f examples/create-pipeline-on-git-push/gitrepository.yaml
-$ kubectl describe gitrepository microservice-code-repo -n jq-example-namespace
+$ kubectl describe gitrepository microservice-code-repo -n jq-example-git
 Name:         microservice-code-repo
-Namespace:    jq-example-namespace
+Namespace:    jq-example-git
 ...
 Events:
   Type    Reason  Age   From               Message
@@ -126,9 +123,9 @@ Events:
  ```
  $ kubectl apply -f examples/create-pipeline-on-git-push/pipelinetrigger.yaml
  pipelinetrigger.pipeline.jquad.rocks/pipelinetrigger-for-git-project created
- $ kubectl describe pipelinetrigger pipelinetrigger-for-git-project -n jq-example-namespace
+ $ kubectl describe pipelinetrigger pipelinetrigger-for-git-project -n jq-example-git
 Name:         pipelinetrigger-for-git-project
-Namespace:    jq-example-namespace
+Namespace:    jq-example-git
 ...
 Status:
   Conditions:
@@ -143,22 +140,22 @@ Status:
 Events:
   Type    Reason  Age   From             Message
   ----    ------  ----  ----             -------
-  Normal  Info    65s   PipelineTrigger  Source microservice-code-repo in namespace jq-example-namespace got new event main/03da4fdbf8f3e027fb56dd0d96244c951a24f2b4
+  Normal  Info    65s   PipelineTrigger  Source microservice-code-repo in namespace jq-example-git got new event main/03da4fdbf8f3e027fb56dd0d96244c951a24f2b4
  ```
 
 5. The `PipelineRun` was successfully created: 
 
 ```
-$ kubectl get pipelineruns -n jq-example-namespace
+$ kubectl get pipelineruns -n jq-example-git
 NAME                                   SUCCEEDED   REASON      STARTTIME   COMPLETIONTIME
 pipelinetrigger-for-git-project-mkfx   True        Succeeded   2m41s       2m29s
 ```
 
 ## Example 2: Build a microservice and create the microservice image when a new base image version is released (`FROM` instruction in the `Dockerfile`)
 
-1. Create the example namespace `jq-example-namespace`. In this namespace are deployed all the examples: 
+1. Create the example namespace `jq-example-image`. In this namespace are deployed all the examples: 
 
- `kubectl create ns jq-example-namespace`
+ `kubectl create ns jq-example-image`
 
 2. Deploy the `imagerepository.yaml`. The `ImageRepository` resource fetches the tags for a given container registry: 
 
