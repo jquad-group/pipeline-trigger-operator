@@ -2,11 +2,11 @@ apiVersion: image.toolkit.fluxcd.io/v1beta1
 kind: ImagePolicy
 metadata:
   name: latest-image-notifier
-  namespace: jq-example-namespace
+  namespace: jq-example-image
 spec:
   imageRepositoryRef:
     name: base-image-container-repo
-    namespace: jq-example-namespace
+    namespace: jq-example-image
   policy:
     semver:
       range: v0.0.x

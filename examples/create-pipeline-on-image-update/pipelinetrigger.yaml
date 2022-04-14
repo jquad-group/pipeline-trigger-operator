@@ -2,7 +2,7 @@ apiVersion: pipeline.jquad.rocks/v1alpha1
 kind: PipelineTrigger
 metadata:
   name: pipelinetrigger-for-image
-  namespace: jq-example-namespace
+  namespace: jq-example-image
 spec:
   source: 
     kind: ImagePolicy
@@ -10,8 +10,6 @@ spec:
   pipeline: 
     name: build-and-push-microservice-on-base-image-update
     serviceAccountName: default
-    maxHistory: 5
-    maxFailedRetries: 3
     workspace:
       name: workspace
       size: 1Gi

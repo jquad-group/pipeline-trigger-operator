@@ -6,7 +6,7 @@ apiVersion: tekton.dev/v1beta1
 kind: Task
 metadata:
   name: clone
-  namespace: jq-example-namespace
+  namespace: jq-example-pr
 spec:
   steps:
     - name: clone
@@ -20,7 +20,7 @@ apiVersion: tekton.dev/v1beta1
 kind: Task
 metadata:
   name: assemble-and-push
-  namespace: jq-example-namespace
+  namespace: jq-example-pr
 spec:
   steps:
     - name: assemble-and-push
@@ -34,7 +34,7 @@ apiVersion: tekton.dev/v1beta1
 kind: Pipeline
 metadata:
   name: build-and-push-microservice-on-pr
-  namespace: jq-example-namespace
+  namespace: jq-example-pr
 spec:
   workspaces:
     - name: workspace

@@ -30,16 +30,6 @@ type Pipeline struct {
 
 	// +kubebuilder:validation:Optional
 	SecurityContext SecurityContext `json:"securityContext"`
-
-	// +kubebuilder:validation:Maximum=10
-	// +kubebuilder:validation:Minimum=1
-	// +kubebuilder:validation:Required
-	MaxFailedRetries int64 `json:"maxFailedRetries"`
-
-	// +kubebuilder:validation:Maximum=10
-	// +kubebuilder:validation:Minimum=1
-	// +kubebuilder:validation:Required
-	MaxHistory int64 `json:"maxHistory"`
 }
 
 func (pipeline *Pipeline) createPipelineRef() *tektondevv1.PipelineRef {

@@ -2,7 +2,7 @@ apiVersion: source.toolkit.fluxcd.io/v1beta1
 kind: GitRepository
 metadata:
   name: microservice-code-repo
-  namespace: jq-example-namespace
+  namespace: jq-example-git
 spec:
   interval: 1m
   url: https://github.com/jquad-group/microservice.git

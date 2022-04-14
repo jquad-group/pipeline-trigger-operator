@@ -7,21 +7,21 @@ data:
 kind: Secret
 metadata:
   name: bitbucket-secret
-  namespace: jq-example-namespace
+  namespace: jq-example-pr
 type: Opaque
 ---
 apiVersion: pipeline.jquad.rocks/v1alpha1
 kind: PullRequest
 metadata:
   name: pullrequest-bitbucket-sample
-  namespace: jq-example-namespace
+  namespace: jq-example-pr
 spec:
   gitProvider:
     provider: Bitbucket
     secretRef: bitbucket-secret
     bitbucket:
-      restEndpoint: https://bitbucket.jquad.rocks/rest
-      project: jquad
+      restEndpoint: https://mybitbucketserver.dev/rest
+      project: myproject
       repository: microservice
   targetBranch: 
     name: refs/heads/main

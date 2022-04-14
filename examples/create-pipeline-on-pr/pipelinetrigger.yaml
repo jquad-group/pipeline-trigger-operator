@@ -2,7 +2,7 @@ apiVersion: pipeline.jquad.rocks/v1alpha1
 kind: PipelineTrigger
 metadata:
   name: pipelinetrigger-for-pr
-  namespace: jq-example-namespace
+  namespace: jq-example-pr
 spec:
   source: 
     kind: PullRequest
@@ -10,8 +10,6 @@ spec:
   pipeline: 
     name: build-and-push-microservice-on-pr
     serviceAccountName: default
-    maxHistory: 3
-    maxFailedRetries: 2 
     securityContext:
       runAsUser: 1001
       runAsGroup: 1001

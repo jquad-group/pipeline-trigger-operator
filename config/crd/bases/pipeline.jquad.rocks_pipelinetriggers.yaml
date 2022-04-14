@@ -51,16 +51,6 @@ spec:
                       - value
                       type: object
                     type: array
-                  maxFailedRetries:
-                    format: int64
-                    maximum: 10
-                    minimum: 1
-                    type: integer
-                  maxHistory:
-                    format: int64
-                    maximum: 10
-                    minimum: 1
-                    type: integer
                   name:
                     type: string
                   securityContext:
@@ -88,8 +78,6 @@ spec:
                     type: object
                 required:
                 - inputParams
-                - maxFailedRetries
-                - maxHistory
                 - name
                 - serviceAccountName
                 - workspace
