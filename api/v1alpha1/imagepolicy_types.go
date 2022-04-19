@@ -64,14 +64,6 @@ func (currentImagePolicy *ImagePolicy) Equals(newImagePolicy ImagePolicy) bool {
 	}
 }
 
-func (currentImagePolicy *ImagePolicy) isUpdated(newImagePolicy ImagePolicy) bool {
-	if currentImagePolicy.RepositoryName == newImagePolicy.RepositoryName && currentImagePolicy.ImageName == newImagePolicy.ImageName && currentImagePolicy.ImageVersion != newImagePolicy.ImageVersion {
-		return true
-	} else {
-		return false
-	}
-}
-
 func (imagePolicy *ImagePolicy) GetImagePolicy(fluxImagePolicy imagereflectorv1.ImagePolicy) {
 	imagePolicy.RepositoryName = getRepositoryName(fluxImagePolicy)
 	imagePolicy.ImageName = getImageName(fluxImagePolicy)

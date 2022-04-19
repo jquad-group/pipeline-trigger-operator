@@ -44,14 +44,6 @@ func (currentBranch *Branch) Equals(newBranch Branch) bool {
 	}
 }
 
-func (currentBranch *Branch) isUpdated(newBranch Branch) bool {
-	if currentBranch.Name == newBranch.Name && currentBranch.Commit != newBranch.Commit {
-		return true
-	} else {
-		return false
-	}
-}
-
 func (currentBranch *Branch) GetBranch(jqBranch pullrequestv1alpha1.Branch) {
 	currentBranch.Name = getPrBranchName(jqBranch)
 	currentBranch.Commit = getPrCommit(jqBranch)

@@ -62,14 +62,6 @@ func (currentGitRepository *GitRepository) Equals(newGitRepository GitRepository
 	}
 }
 
-func (currentGitRepository *GitRepository) isUpdated(newGitRepository GitRepository) bool {
-	if currentGitRepository.BranchName == newGitRepository.BranchName && currentGitRepository.RepositoryName == newGitRepository.RepositoryName && currentGitRepository.CommitId != newGitRepository.CommitId {
-		return true
-	} else {
-		return false
-	}
-}
-
 func getGitRepositoryName(fluxGitRepository sourcev1.GitRepository) string {
 	repositoryName := strings.Split(fluxGitRepository.Status.Artifact.Path, revisionDelimiter)[gitRepositoryNamePosition]
 	return repositoryName
