@@ -90,6 +90,7 @@ func (pullrequestSubscriber PullrequestSubscriber) CreatePipelineRunResource(pip
 					Status:             v1.ConditionTrue,
 					Message:            "Unknown",
 				}
+				tempBranch.Details = ""
 				tempBranch.AddOrReplaceCondition(condition)
 				pipelineTrigger.Status.Branches.Branches[key] = tempBranch
 			} else {
@@ -100,6 +101,7 @@ func (pullrequestSubscriber PullrequestSubscriber) CreatePipelineRunResource(pip
 					Status:             v1.ConditionFalse,
 					Message:            err.Error(),
 				}
+				tempBranch.Details = ""
 				tempBranch.AddOrReplaceCondition(condition)
 				pipelineTrigger.Status.Branches.Branches[key] = tempBranch
 			}
