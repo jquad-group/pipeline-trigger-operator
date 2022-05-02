@@ -10,12 +10,11 @@ import (
 	"github.com/jquad-group/pipeline-trigger-operator/pkg/json"
 	apis "github.com/jquad-group/pipeline-trigger-operator/pkg/status"
 	tektondevv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
-	clientsetversioned "github.com/tektoncd/pipeline/pkg/client/clientset/versioned"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 type ImagepolicySubscriber struct {
@@ -57,12 +56,13 @@ func (imagepolicySubscriber ImagepolicySubscriber) GetLatestEvent(ctx context.Co
 	return gotNewEvent, nil
 }
 
-func (imagepolicySubscriber ImagepolicySubscriber) CreatePipelineRunResource(pipelineTrigger *pipelinev1alpha1.PipelineTrigger) []*tektondevv1.PipelineRun {
+func (imagepolicySubscriber ImagepolicySubscriber) CreatePipelineRunResource(pipelineTrigger *pipelinev1alpha1.PipelineTrigger, r *runtime.Scheme) []*tektondevv1.PipelineRun {
 	var prs []*tektondevv1.PipelineRun
 	if len(pipelineTrigger.Status.ImagePolicy.Conditions) == 0 {
 		paramsCorrectness, err := evaluatePipelineParamsForImage(pipelineTrigger)
 		if paramsCorrectness {
 			pr := pipelineTrigger.Spec.Pipeline.CreatePipelineRunResourceForImage(*pipelineTrigger)
+			ctrl.SetControllerReference(pipelineTrigger, pr, r)
 			prs = append(prs, pr)
 			condition := v1.Condition{
 				Type:               apis.ReconcileUnknown,
@@ -98,29 +98,10 @@ func evaluatePipelineParamsForImage(pipelineTrigger *pipelinev1alpha1.PipelineTr
 	return true, nil
 }
 
-func (imagepolicySubscriber ImagepolicySubscriber) GetPipelineRunsByLabel(ctx context.Context, req ctrl.Request, pipelineTrigger *pipelinev1alpha1.PipelineTrigger) (*tektondevv1.PipelineRunList, error) {
-	log := log.FromContext(ctx)
-
-	cfg := ctrl.GetConfigOrDie()
-
-	tektonClient, err := clientsetversioned.NewForConfig(cfg)
-
-	if err != nil {
-		log.Info("Cannot create tekton client.")
-	}
-
-	var pipelineRunsByLabel []tektondevv1.PipelineRun
-
-	opts := v1.ListOptions{LabelSelector: pipelineTrigger.Status.ImagePolicy.GenerateImagePolicyLabelsAsString()}
-	pipelineRunList, err := tektonClient.TektonV1beta1().PipelineRuns(pipelineTrigger.Namespace).List(ctx, opts)
-	if err != nil {
-		log.Info("Cannot get pipelineruns by label.")
-	}
-
+func (imagepolicySubscriber ImagepolicySubscriber) UpdateStatus(ctx context.Context, req ctrl.Request, pipelineTrigger *pipelinev1alpha1.PipelineTrigger, pipelineRunList *tektondevv1.PipelineRunList) {
 	for i := range pipelineRunList.Items {
 		item := pipelineRunList.Items[i]
 		pipelineTrigger.Status.ImagePolicy.LatestPipelineRun = item.Name
-		pipelineRunsByLabel = append(pipelineRunsByLabel, item)
 		for _, c := range pipelineRunList.Items[i].Status.Conditions {
 			if (tektondevv1.PipelineRunReason(c.GetReason()) == tektondevv1.PipelineRunReasonCompleted || tektondevv1.PipelineRunReason(c.GetReason()) == tektondevv1.PipelineRunReasonSuccessful) && v1.ConditionStatus(c.Status) == v1.ConditionTrue {
 				condition := v1.Condition{
@@ -132,7 +113,9 @@ func (imagepolicySubscriber ImagepolicySubscriber) GetPipelineRunsByLabel(ctx co
 				}
 				pipelineTrigger.Status.ImagePolicy.AddOrReplaceCondition(condition)
 			}
-			if tektondevv1.PipelineRunReason(c.GetReason()) == tektondevv1.PipelineRunReasonFailed && v1.ConditionStatus(c.Status) == v1.ConditionFalse {
+			if (tektondevv1.PipelineRunReason(c.GetReason()) == tektondevv1.PipelineRunReasonFailed && v1.ConditionStatus(c.Status) == v1.ConditionFalse) ||
+				(tektondevv1.PipelineRunReason(c.GetReason()) == tektondevv1.PipelineRunReasonCancelled) ||
+				(tektondevv1.PipelineRunReason(c.GetReason()) == tektondevv1.PipelineRunReasonTimedOut) {
 				condition := v1.Condition{
 					Type:               apis.ReconcileError,
 					LastTransitionTime: v1.Now(),
@@ -144,10 +127,6 @@ func (imagepolicySubscriber ImagepolicySubscriber) GetPipelineRunsByLabel(ctx co
 			}
 		}
 	}
-
-	var pipelineRunsList tektondevv1.PipelineRunList
-	pipelineRunsList.Items = pipelineRunsByLabel
-	return &pipelineRunsList, err
 }
 
 func (imagepolicySubscriber ImagepolicySubscriber) IsFinished(pipelineTrigger *pipelinev1alpha1.PipelineTrigger) bool {

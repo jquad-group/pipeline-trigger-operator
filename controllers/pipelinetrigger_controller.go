@@ -18,17 +18,19 @@ package controllers
 
 import (
 	"context"
-	"time"
 
 	imagereflectorv1 "github.com/fluxcd/image-reflector-controller/api/v1beta1"
 	"github.com/go-logr/logr"
 	apis "github.com/jquad-group/pipeline-trigger-operator/pkg/status"
 	core "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/utils/pointer"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -120,24 +122,30 @@ func (r *PipelineTriggerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	if gotNewEvent {
 		// Update the status conditions
 		r.Status().Update(ctx, &pipelineTrigger)
-		return ctrl.Result{RequeueAfter: time.Second * 10}, nil
+		return ctrl.Result{Requeue: true}, nil
 	}
 
-	prs := sourceSubscriber.CreatePipelineRunResource(&pipelineTrigger)
+	prs := sourceSubscriber.CreatePipelineRunResource(&pipelineTrigger, r.Scheme)
 	for pipelineRunCnt := 0; pipelineRunCnt < len(prs); pipelineRunCnt++ {
-		instanceName := pipelineTrigger.StartPipelineRun(prs[pipelineRunCnt], ctx, req, r.Scheme)
+		instanceName, _ := pipelineTrigger.StartPipelineRun(prs[pipelineRunCnt], ctx, req)
 		newVersionMsg := "Started the pipeline " + instanceName + " in namespace " + pipelineTrigger.Namespace
 		r.recorder.Event(&pipelineTrigger, core.EventTypeNormal, "Info", newVersionMsg)
 	}
 
-	_, errList := sourceSubscriber.GetPipelineRunsByLabel(ctx, req, &pipelineTrigger)
+	r.Status().Update(ctx, &pipelineTrigger)
+
+	var pipelineRunList tektondevv1.PipelineRunList
+	errList := r.List(ctx, &pipelineRunList, client.InNamespace(req.Namespace), client.MatchingFields{pipelineRunField: req.Name})
 	if errList != nil {
 		log.Error(errList, "Failed to list PipelineRuns in ", pipelineTrigger.Namespace, " with label ", pipelineTrigger.Name)
 	}
-	if !sourceSubscriber.IsFinished(&pipelineTrigger) {
-		r.Status().Update(ctx, &pipelineTrigger)
-		return ctrl.Result{RequeueAfter: time.Second * 50}, nil
-	}
+	sourceSubscriber.UpdateStatus(ctx, req, &pipelineTrigger, &pipelineRunList)
+
+	/*
+		if errPatch := r.patchApply(ctx, pipelineTrigger.Status, pipelineTrigger); errPatch != nil {
+			log.Error(err, "unable to update status")
+		}
+	*/
 
 	r.Status().Update(ctx, &pipelineTrigger)
 
@@ -188,6 +196,24 @@ func (r *PipelineTriggerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		return err
 	}
 
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &tektondevv1.PipelineRun{}, pipelineRunField, func(rawObj client.Object) []string {
+		// grab the job object, extract the owner...
+		job := rawObj.(*tektondevv1.PipelineRun)
+		owner := metav1.GetControllerOf(job)
+		if owner == nil {
+			return nil
+		}
+		// ...make sure it's a CronJob...
+		if owner.Kind != "PipelineTrigger" {
+			return nil
+		}
+
+		// ...and if so, return it
+		return []string{owner.Name}
+	}); err != nil {
+		return err
+	}
+
 	/*
 		The controller will first register the Type that it manages, as well as the types of subresources that it controls.
 		Since we also want to watch ImagePolicies, GitRepositories and PullRequests that are not controlled or managed by the controller, we will need to use the `Watches()` functionality as well.
@@ -215,7 +241,7 @@ func (r *PipelineTriggerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(
 			&source.Kind{Type: &pullrequestv1alpha1.PullRequest{}},
 			handler.EnqueueRequestsFromMapFunc(r.findObjectsForSource),
-			//builder.WithPredicates(SourceRevisionChangePredicate{}),
+			builder.WithPredicates(predicate.GenerationChangedPredicate{}),
 		).
 		Watches(
 			&source.Kind{Type: &tektondevv1.PipelineRun{}},
@@ -223,7 +249,7 @@ func (r *PipelineTriggerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				IsController: true,
 				OwnerType:    &pipelinev1alpha1.PipelineTrigger{},
 			},
-			builder.WithPredicates(predicate.ResourceVersionChangedPredicate{}),
+			builder.WithPredicates(StatusChangePredicate{}),
 		).
 		Complete(r)
 
@@ -293,4 +319,51 @@ func (r *PipelineTriggerReconciler) ManageError(context context.Context, obj *pi
 		return reconcile.Result{}, err
 	}
 	return reconcile.Result{}, nil
+}
+
+func (r *PipelineTriggerReconciler) ManageUpdate(context context.Context, obj *pipelinev1alpha1.PipelineTrigger, req ctrl.Request) (reconcile.Result, error) {
+	log := log.FromContext(context)
+	if err := r.Get(context, types.NamespacedName{Name: obj.Name, Namespace: obj.Namespace}, obj); err != nil {
+		log.Error(err, "unable to get obj")
+		return reconcile.Result{}, err
+	}
+
+	condition := metav1.Condition{
+		Type:               apis.ReconcileInProgress,
+		LastTransitionTime: metav1.Now(),
+		ObservedGeneration: obj.GetGeneration(),
+		Reason:             apis.ReconcileInProgress,
+		Status:             metav1.ConditionTrue,
+		Message:            "Progressing",
+	}
+	obj.AddOrReplaceCondition(condition)
+	err := r.Status().Update(context, obj)
+	if err != nil {
+		log.Error(err, "unable to update status")
+		return reconcile.Result{}, err
+	}
+	return reconcile.Result{Requeue: true}, nil
+}
+
+func (r *PipelineTriggerReconciler) patchApply(ctx context.Context, status pipelinev1alpha1.PipelineTriggerStatus, pipelineTrigger pipelinev1alpha1.PipelineTrigger) error {
+	errtest := r.Get(ctx, client.ObjectKey{Namespace: pipelineTrigger.GetNamespace(), Name: pipelineTrigger.GetName()}, &pipelineTrigger)
+	if errtest != nil {
+		return errtest
+	}
+	patch := &unstructured.Unstructured{}
+	patch.SetGroupVersionKind(schema.GroupVersionKind{
+		Group:   "pipeline.jquad.rocks",
+		Version: "v1alpha1",
+		Kind:    "PipelineTrigger",
+	})
+	patch.SetNamespace(pipelineTrigger.GetNamespace())
+	patch.SetName(pipelineTrigger.GetName())
+	patch.UnstructuredContent()["status"] = status
+
+	err := r.Patch(ctx, patch, client.Apply, &client.PatchOptions{
+		FieldManager: "pipelinetrigger-controller",
+		Force:        pointer.Bool(true),
+	})
+
+	return err
 }

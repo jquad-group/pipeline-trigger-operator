@@ -3,6 +3,7 @@ package v1alpha1
 import (
 	//pullrequestv1alpha1 "github.com/jquad-group/pullrequest-operator/api/v1alpha1"
 	"context"
+	"fmt"
 	"strings"
 
 	pipelinev1alpha1 "github.com/jquad-group/pipeline-trigger-operator/api/v1alpha1"
@@ -11,12 +12,11 @@ import (
 	apis "github.com/jquad-group/pipeline-trigger-operator/pkg/status"
 	pullrequestv1alpha1 "github.com/jquad-group/pullrequest-operator/api/v1alpha1"
 	tektondevv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
-	clientsetversioned "github.com/tektoncd/pipeline/pkg/client/clientset/versioned"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 type PullrequestSubscriber struct {
@@ -42,6 +42,15 @@ func (pullrequestSubscriber PullrequestSubscriber) Exists(ctx context.Context, p
 
 func (pullrequestSubscriber PullrequestSubscriber) GetLatestEvent(ctx context.Context, pipelineTrigger *pipelinev1alpha1.PipelineTrigger, client client.Client, req ctrl.Request) (bool, error) {
 	foundSource := &pullrequestv1alpha1.PullRequest{}
+	/*
+		condition := v1.Condition{
+			Type:               apis.ReconcileUnknown,
+			LastTransitionTime: v1.Now(),
+			Reason:             apis.ReconcileUnknown,
+			Status:             v1.ConditionTrue,
+			Message:            "Unknown",
+		}
+	*/
 	gotNewEvent := false
 	if err := client.Get(ctx, types.NamespacedName{Name: pipelineTrigger.Spec.Source.Name, Namespace: pipelineTrigger.Namespace}, foundSource); err != nil {
 		return gotNewEvent, err
@@ -53,6 +62,8 @@ func (pullrequestSubscriber PullrequestSubscriber) GetLatestEvent(ctx context.Co
 		for key, value := range branches.Branches {
 			_, found := pipelineTrigger.Status.Branches.Branches[key]
 			if !found {
+				// add start condition to every new found branch
+				//value.AddOrReplaceCondition(condition)
 				// add the branch
 				pipelineTrigger.Status.Branches.Branches[key] = value
 				gotNewEvent = true
@@ -67,13 +78,20 @@ func (pullrequestSubscriber PullrequestSubscriber) GetLatestEvent(ctx context.Co
 			}
 		}
 	} else {
+		// add start condition to every new found branch
+		/*
+			for key, value := range branches.Branches {
+				value.AddOrReplaceCondition(condition)
+				branches.Branches[key] = value
+			}
+		*/
 		pipelineTrigger.Status.Branches = branches
 		gotNewEvent = true
 	}
 	return gotNewEvent, nil
 }
 
-func (pullrequestSubscriber PullrequestSubscriber) CreatePipelineRunResource(pipelineTrigger *pipelinev1alpha1.PipelineTrigger) []*tektondevv1.PipelineRun {
+func (pullrequestSubscriber PullrequestSubscriber) CreatePipelineRunResource(pipelineTrigger *pipelinev1alpha1.PipelineTrigger, r *runtime.Scheme) []*tektondevv1.PipelineRun {
 	var prs []*tektondevv1.PipelineRun
 	for key := range pipelineTrigger.Status.Branches.Branches {
 		tempBranch := pipelineTrigger.Status.Branches.Branches[key]
@@ -82,6 +100,7 @@ func (pullrequestSubscriber PullrequestSubscriber) CreatePipelineRunResource(pip
 			paramsCorrectness, err := evaluatePipelineParams(pipelineTrigger, tempBranch)
 			if paramsCorrectness {
 				pr := pipelineTrigger.Spec.Pipeline.CreatePipelineRunResourceForBranch(*pipelineTrigger, tempBranch, tempBranch.GenerateBranchLabelsAsHash())
+				ctrl.SetControllerReference(pipelineTrigger, pr, r)
 				prs = append(prs, pr)
 				condition := v1.Condition{
 					Type:               apis.ReconcileUnknown,
@@ -123,65 +142,46 @@ func evaluatePipelineParams(pipelineTrigger *pipelinev1alpha1.PipelineTrigger, c
 	return true, nil
 }
 
-func (pullrequestSubscriber PullrequestSubscriber) GetPipelineRunsByLabel(ctx context.Context, req ctrl.Request, pipelineTrigger *pipelinev1alpha1.PipelineTrigger) (*tektondevv1.PipelineRunList, error) {
-	log := log.FromContext(ctx)
-
-	cfg := ctrl.GetConfigOrDie()
-
-	tektonClient, err := clientsetversioned.NewForConfig(cfg)
-
-	if err != nil {
-		log.Info("Cannot create tekton client.")
-	}
-
+func (pullrequestSubscriber PullrequestSubscriber) UpdateStatus(ctx context.Context, req ctrl.Request, pipelineTrigger *pipelinev1alpha1.PipelineTrigger, pipelineRunList *tektondevv1.PipelineRunList) {
 	// the status is empty during the first reconciliation
 	if len(pipelineTrigger.Status.Branches.Branches) > 0 {
-		var pipelineRunsByLabel []tektondevv1.PipelineRun
 		for key := range pipelineTrigger.Status.Branches.Branches {
 			tempBranch := pipelineTrigger.Status.Branches.Branches[key]
-			opts := v1.ListOptions{LabelSelector: tempBranch.GenerateBranchLabelsAsString()}
-			pipelineRunList, err := tektonClient.TektonV1beta1().PipelineRuns(pipelineTrigger.Namespace).List(ctx, opts)
-			if err != nil {
-				log.Info("Cannot get pipelineruns by label.")
-			}
-
 			for i := range pipelineRunList.Items {
 				item := pipelineRunList.Items[i]
-				tempBranch.LatestPipelineRun = item.Name
-				pipelineRunsByLabel = append(pipelineRunsByLabel, item)
-				for _, c := range pipelineRunList.Items[i].Status.Conditions {
-					if (tektondevv1.PipelineRunReason(c.GetReason()) == tektondevv1.PipelineRunReasonCompleted || tektondevv1.PipelineRunReason(c.GetReason()) == tektondevv1.PipelineRunReasonSuccessful) && v1.ConditionStatus(c.Status) == v1.ConditionTrue {
-						condition := v1.Condition{
-							Type:               apis.ReconcileSuccess,
-							LastTransitionTime: v1.Now(),
-							Reason:             apis.ReconcileSuccessReason,
-							Status:             v1.ConditionTrue,
-							Message:            "Reconciliation is successful.",
+				tempBranchLabels := tempBranch.GenerateBranchLabelsAsHash()
+				tempBranchLabels["tekton.dev/pipeline"] = pipelineTrigger.Spec.Pipeline.Name
+				itemLabels := item.GetLabels()
+				if fmt.Sprint(tempBranchLabels) == fmt.Sprint(itemLabels) {
+					tempBranch.LatestPipelineRun = item.Name
+					for _, c := range pipelineRunList.Items[i].Status.Conditions {
+						if (tektondevv1.PipelineRunReason(c.GetReason()) == tektondevv1.PipelineRunReasonCompleted || tektondevv1.PipelineRunReason(c.GetReason()) == tektondevv1.PipelineRunReasonSuccessful) && v1.ConditionStatus(c.Status) == v1.ConditionTrue {
+							condition := v1.Condition{
+								Type:               apis.ReconcileSuccess,
+								LastTransitionTime: v1.Now(),
+								Reason:             apis.ReconcileSuccessReason,
+								Status:             v1.ConditionTrue,
+								Message:            "Reconciliation is successful.",
+							}
+							tempBranch.AddOrReplaceCondition(condition)
 						}
-						tempBranch.AddOrReplaceCondition(condition)
-						pipelineTrigger.Status.Branches.Branches[key] = tempBranch
-					}
-					if tektondevv1.PipelineRunReason(c.GetReason()) == tektondevv1.PipelineRunReasonFailed && v1.ConditionStatus(c.Status) == v1.ConditionFalse {
-						condition := v1.Condition{
-							Type:               apis.ReconcileError,
-							LastTransitionTime: v1.Now(),
-							Reason:             apis.ReconcileErrorReason,
-							Status:             v1.ConditionTrue,
-							Message:            "Reconciliation is successful.",
+						if (tektondevv1.PipelineRunReason(c.GetReason()) == tektondevv1.PipelineRunReasonFailed && v1.ConditionStatus(c.Status) == v1.ConditionFalse) ||
+							(tektondevv1.PipelineRunReason(c.GetReason()) == tektondevv1.PipelineRunReasonCancelled) ||
+							(tektondevv1.PipelineRunReason(c.GetReason()) == tektondevv1.PipelineRunReasonTimedOut) {
+							condition := v1.Condition{
+								Type:               apis.ReconcileError,
+								LastTransitionTime: v1.Now(),
+								Reason:             apis.ReconcileErrorReason,
+								Status:             v1.ConditionTrue,
+								Message:            "Reconciliation is successful.",
+							}
+							tempBranch.AddOrReplaceCondition(condition)
 						}
-						tempBranch.AddOrReplaceCondition(condition)
-						pipelineTrigger.Status.Branches.Branches[key] = tempBranch
 					}
+					pipelineTrigger.Status.Branches.Branches[key] = tempBranch
 				}
 			}
 		}
-
-		var pipelineRunsList tektondevv1.PipelineRunList
-		pipelineRunsList.Items = pipelineRunsByLabel
-		return &pipelineRunsList, err
-	} else {
-		var pipelineRunsList tektondevv1.PipelineRunList
-		return &pipelineRunsList, err
 	}
 }
 

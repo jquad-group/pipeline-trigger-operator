@@ -9,12 +9,11 @@ import (
 	"github.com/jquad-group/pipeline-trigger-operator/pkg/json"
 	apis "github.com/jquad-group/pipeline-trigger-operator/pkg/status"
 	tektondevv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
-	clientsetversioned "github.com/tektoncd/pipeline/pkg/client/clientset/versioned"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 type GitrepositorySubscriber struct {
@@ -56,12 +55,13 @@ func (gitrepositorySubscriber GitrepositorySubscriber) GetLatestEvent(ctx contex
 	return gotNewEvent, nil
 }
 
-func (gitrepositorySubscriber GitrepositorySubscriber) CreatePipelineRunResource(pipelineTrigger *pipelinev1alpha1.PipelineTrigger) []*tektondevv1.PipelineRun {
+func (gitrepositorySubscriber GitrepositorySubscriber) CreatePipelineRunResource(pipelineTrigger *pipelinev1alpha1.PipelineTrigger, r *runtime.Scheme) []*tektondevv1.PipelineRun {
 	var prs []*tektondevv1.PipelineRun
 	if len(pipelineTrigger.Status.GitRepository.Conditions) == 0 {
 		paramsCorrectness, err := evaluatePipelineParamsForGitRepository(pipelineTrigger)
 		if paramsCorrectness {
 			pr := pipelineTrigger.Spec.Pipeline.CreatePipelineRunResourceForGit(*pipelineTrigger)
+			ctrl.SetControllerReference(pipelineTrigger, pr, r)
 			prs = append(prs, pr)
 			condition := v1.Condition{
 				Type:               apis.ReconcileUnknown,
@@ -97,29 +97,10 @@ func evaluatePipelineParamsForGitRepository(pipelineTrigger *pipelinev1alpha1.Pi
 	return true, nil
 }
 
-func (gitrepositorySubscriber GitrepositorySubscriber) GetPipelineRunsByLabel(ctx context.Context, req ctrl.Request, pipelineTrigger *pipelinev1alpha1.PipelineTrigger) (*tektondevv1.PipelineRunList, error) {
-	log := log.FromContext(ctx)
-
-	cfg := ctrl.GetConfigOrDie()
-
-	tektonClient, err := clientsetversioned.NewForConfig(cfg)
-
-	if err != nil {
-		log.Info("Cannot create tekton client.")
-	}
-
-	var pipelineRunsByLabel []tektondevv1.PipelineRun
-
-	opts := v1.ListOptions{LabelSelector: pipelineTrigger.Status.GitRepository.GenerateGitRepositoryLabelsAsString()}
-	pipelineRunList, err := tektonClient.TektonV1beta1().PipelineRuns(pipelineTrigger.Namespace).List(ctx, opts)
-	if err != nil {
-		log.Info("Cannot get pipelineruns by label.")
-	}
-
+func (gitrepositorySubscriber GitrepositorySubscriber) UpdateStatus(ctx context.Context, req ctrl.Request, pipelineTrigger *pipelinev1alpha1.PipelineTrigger, pipelineRunList *tektondevv1.PipelineRunList) {
 	for i := range pipelineRunList.Items {
 		item := pipelineRunList.Items[i]
 		pipelineTrigger.Status.GitRepository.LatestPipelineRun = item.Name
-		pipelineRunsByLabel = append(pipelineRunsByLabel, item)
 		for _, c := range pipelineRunList.Items[i].Status.Conditions {
 			if (tektondevv1.PipelineRunReason(c.GetReason()) == tektondevv1.PipelineRunReasonCompleted || tektondevv1.PipelineRunReason(c.GetReason()) == tektondevv1.PipelineRunReasonSuccessful) && v1.ConditionStatus(c.Status) == v1.ConditionTrue {
 				condition := v1.Condition{
@@ -131,7 +112,9 @@ func (gitrepositorySubscriber GitrepositorySubscriber) GetPipelineRunsByLabel(ct
 				}
 				pipelineTrigger.Status.GitRepository.AddOrReplaceCondition(condition)
 			}
-			if tektondevv1.PipelineRunReason(c.GetReason()) == tektondevv1.PipelineRunReasonFailed && v1.ConditionStatus(c.Status) == v1.ConditionFalse {
+			if (tektondevv1.PipelineRunReason(c.GetReason()) == tektondevv1.PipelineRunReasonFailed && v1.ConditionStatus(c.Status) == v1.ConditionFalse) ||
+				(tektondevv1.PipelineRunReason(c.GetReason()) == tektondevv1.PipelineRunReasonCancelled) ||
+				(tektondevv1.PipelineRunReason(c.GetReason()) == tektondevv1.PipelineRunReasonTimedOut) {
 				condition := v1.Condition{
 					Type:               apis.ReconcileError,
 					LastTransitionTime: v1.Now(),
@@ -143,10 +126,6 @@ func (gitrepositorySubscriber GitrepositorySubscriber) GetPipelineRunsByLabel(ct
 			}
 		}
 	}
-
-	var pipelineRunsList tektondevv1.PipelineRunList
-	pipelineRunsList.Items = pipelineRunsByLabel
-	return &pipelineRunsList, err
 }
 
 func (gitrepositorySubscriber GitrepositorySubscriber) IsFinished(pipelineTrigger *pipelinev1alpha1.PipelineTrigger) bool {

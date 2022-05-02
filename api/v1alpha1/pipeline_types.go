@@ -10,7 +10,6 @@ import (
 	tektondevv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
 	clientsetversioned "github.com/tektoncd/pipeline/pkg/client/clientset/versioned"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -86,6 +85,11 @@ func (pipeline *Pipeline) CreatePipelineRunResourceForBranch(pipelineTrigger Pip
 			},
 		},
 	}
+	/*
+		if err := ctrl.SetControllerReference(pipelineTrigger, pr, r); err != nil {
+			log.Error(err, "unable to set owner reference", "pipelineTrigger", pipelineTrigger)
+		}
+	*/
 	return pr
 }
 
@@ -137,7 +141,7 @@ func (pipeline *Pipeline) CreatePipelineRunResourceForImage(pipelineTrigger Pipe
 	return pr
 }
 
-func (pipelineTrigger *PipelineTrigger) StartPipelineRun(pr *tektondevv1.PipelineRun, ctx context.Context, req ctrl.Request, r *runtime.Scheme) string {
+func (pipelineTrigger *PipelineTrigger) StartPipelineRun(pr *tektondevv1.PipelineRun, ctx context.Context, req ctrl.Request) (string, *tektondevv1.PipelineRun) {
 	log := log.FromContext(ctx)
 
 	cfg := ctrl.GetConfigOrDie()
@@ -155,7 +159,5 @@ func (pipelineTrigger *PipelineTrigger) StartPipelineRun(pr *tektondevv1.Pipelin
 		log.Info("Cannot create tekton pipelinerun")
 	}
 
-	ctrl.SetControllerReference(pipelineTrigger, prInstance, r)
-
-	return prInstance.Name
+	return prInstance.Name, prInstance
 }
