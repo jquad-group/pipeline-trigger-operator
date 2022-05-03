@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
 	pipelinev1alpha1 "github.com/jquad-group/pipeline-trigger-operator/api/v1alpha1"
 
 	"github.com/jquad-group/pipeline-trigger-operator/pkg/json"
@@ -198,4 +200,31 @@ func (pullrequestSubscriber PullrequestSubscriber) IsFinished(pipelineTrigger *p
 		}
 	}
 	return result
+}
+
+func (pullrequestSubscriber *PullrequestSubscriber) ManageError(context context.Context, obj *pipelinev1alpha1.PipelineTrigger, req ctrl.Request, r client.Client, message error) (reconcile.Result, error) {
+
+	if err := r.Get(context, types.NamespacedName{Name: obj.Name, Namespace: obj.Namespace}, obj); err != nil {
+		return reconcile.Result{}, err
+	}
+
+	condition := v1.Condition{
+		Type:               apis.ReconcileError,
+		LastTransitionTime: v1.Now(),
+		ObservedGeneration: obj.GetGeneration(),
+		Reason:             apis.ReconcileErrorReason,
+		Status:             v1.ConditionFalse,
+		Message:            message.Error(),
+	}
+
+	for key := range obj.Status.Branches.Branches {
+		tempBranch := obj.Status.Branches.Branches[key]
+		tempBranch.AddOrReplaceCondition(condition)
+	}
+
+	err := r.Status().Update(context, obj)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+	return reconcile.Result{}, nil
 }

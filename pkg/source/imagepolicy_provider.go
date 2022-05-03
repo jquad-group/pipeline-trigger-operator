@@ -15,6 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 type ImagepolicySubscriber struct {
@@ -139,4 +140,28 @@ func (imagepolicySubscriber ImagepolicySubscriber) IsFinished(pipelineTrigger *p
 		result = result && true
 	}
 	return result
+}
+
+func (imagepolicySubscriber *ImagepolicySubscriber) ManageError(context context.Context, obj *pipelinev1alpha1.PipelineTrigger, req ctrl.Request, r client.Client, message error) (reconcile.Result, error) {
+
+	if err := r.Get(context, types.NamespacedName{Name: obj.Name, Namespace: obj.Namespace}, obj); err != nil {
+		return reconcile.Result{}, err
+	}
+
+	condition := v1.Condition{
+		Type:               apis.ReconcileError,
+		LastTransitionTime: v1.Now(),
+		ObservedGeneration: obj.GetGeneration(),
+		Reason:             apis.ReconcileErrorReason,
+		Status:             v1.ConditionFalse,
+		Message:            message.Error(),
+	}
+
+	obj.Status.ImagePolicy.AddOrReplaceCondition(condition)
+
+	err := r.Status().Update(context, obj)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+	return reconcile.Result{}, nil
 }

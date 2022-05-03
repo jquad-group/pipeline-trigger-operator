@@ -104,19 +104,19 @@ func (r *PipelineTriggerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	sourceSubscriber := createSourceSubscriber(&pipelineTrigger)
 	if err := sourceSubscriber.Exists(ctx, pipelineTrigger, r.Client, req); err != nil {
 		// requeue with error (maybe the resource was deployt afterwards?)
-		return r.ManageError(ctx, &pipelineTrigger, req, err)
+		return sourceSubscriber.ManageError(ctx, &pipelineTrigger, req, r.Client, err)
 	}
 
 	// check if the referenced tekton pipeline exists
 	if err := r.existsPipelineResource(ctx, pipelineTrigger); err != nil {
 		// requeue with error (maybe the resource was deployt afterwards?)
-		return r.ManageError(ctx, &pipelineTrigger, req, err)
+		return sourceSubscriber.ManageError(ctx, &pipelineTrigger, req, r.Client, err)
 	}
 
 	// Get the Latest Source Event
 	gotNewEvent, err := sourceSubscriber.GetLatestEvent(ctx, &pipelineTrigger, r.Client, req)
 	if err != nil {
-		return r.ManageError(ctx, &pipelineTrigger, req, err)
+		return sourceSubscriber.ManageError(ctx, &pipelineTrigger, req, r.Client, err)
 	}
 
 	if gotNewEvent {
