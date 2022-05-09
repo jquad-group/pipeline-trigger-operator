@@ -1,4 +1,4 @@
-package controllers
+package predicate
 
 import (
 	"sigs.k8s.io/controller-runtime/pkg/event"

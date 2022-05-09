@@ -2,7 +2,7 @@ package v1alpha1
 
 import (
 	"context"
-
+	"fmt"
 	"strings"
 
 	imagereflectorv1 "github.com/fluxcd/image-reflector-controller/api/v1beta1"
@@ -39,6 +39,26 @@ func (imagepolicySubscriber ImagepolicySubscriber) Exists(ctx context.Context, p
 	}
 }
 
+func (imagepolicySubscriber ImagepolicySubscriber) CalculateCurrentState(ctx context.Context, pipelineTrigger *pipelinev1alpha1.PipelineTrigger, client client.Client, pipelineRunList tektondevv1.PipelineRunList) bool {
+	// get the current image policy from the Flux ImagePolicy resource
+	foundSource := &imagereflectorv1.ImagePolicy{}
+	if err := client.Get(ctx, types.NamespacedName{Name: pipelineTrigger.Spec.Source.Name, Namespace: pipelineTrigger.Namespace}, foundSource); err != nil {
+		return false
+	}
+	var imagePolicy pipelinev1alpha1.ImagePolicy
+	imagePolicy.GetImagePolicy(*foundSource)
+	imagePolicy.GenerateDetails()
+	imagePolicyLabels := imagePolicy.GenerateImagePolicyLabelsAsHash()
+	imagePolicyLabels["tekton.dev/pipeline"] = pipelineTrigger.Spec.Pipeline.Name
+	for i := range pipelineRunList.Items {
+		if fmt.Sprint(imagePolicyLabels) == fmt.Sprint(pipelineRunList.Items[i].GetLabels()) {
+			return true
+		}
+	}
+
+	return false
+}
+
 func (imagepolicySubscriber ImagepolicySubscriber) GetLatestEvent(ctx context.Context, pipelineTrigger *pipelinev1alpha1.PipelineTrigger, client client.Client, req ctrl.Request) (bool, error) {
 	foundSource := &imagereflectorv1.ImagePolicy{}
 	gotNewEvent := false
@@ -68,6 +88,7 @@ func (imagepolicySubscriber ImagepolicySubscriber) CreatePipelineRunResource(pip
 			condition := v1.Condition{
 				Type:               apis.ReconcileUnknown,
 				LastTransitionTime: v1.Now(),
+				ObservedGeneration: pipelineTrigger.GetGeneration(),
 				Reason:             apis.ReconcileUnknown,
 				Status:             v1.ConditionTrue,
 				Message:            "Unknown",
@@ -77,6 +98,7 @@ func (imagepolicySubscriber ImagepolicySubscriber) CreatePipelineRunResource(pip
 			condition := v1.Condition{
 				Type:               apis.ReconcileError,
 				LastTransitionTime: v1.Now(),
+				ObservedGeneration: pipelineTrigger.GetGeneration(),
 				Reason:             apis.ReconcileErrorReason,
 				Status:             v1.ConditionFalse,
 				Message:            err.Error(),
@@ -99,7 +121,7 @@ func evaluatePipelineParamsForImage(pipelineTrigger *pipelinev1alpha1.PipelineTr
 	return true, nil
 }
 
-func (imagepolicySubscriber ImagepolicySubscriber) UpdateStatus(ctx context.Context, req ctrl.Request, pipelineTrigger *pipelinev1alpha1.PipelineTrigger, pipelineRunList *tektondevv1.PipelineRunList) {
+func (imagepolicySubscriber ImagepolicySubscriber) SetCurrentPipelineRunStatus(pipelineRunList tektondevv1.PipelineRunList, pipelineTrigger *pipelinev1alpha1.PipelineTrigger) {
 	for i := range pipelineRunList.Items {
 		item := pipelineRunList.Items[i]
 		pipelineTrigger.Status.ImagePolicy.LatestPipelineRun = item.Name
@@ -108,21 +130,32 @@ func (imagepolicySubscriber ImagepolicySubscriber) UpdateStatus(ctx context.Cont
 				condition := v1.Condition{
 					Type:               apis.ReconcileSuccess,
 					LastTransitionTime: v1.Now(),
+					ObservedGeneration: pipelineTrigger.GetGeneration(),
 					Reason:             apis.ReconcileSuccessReason,
 					Status:             v1.ConditionTrue,
 					Message:            "Reconciliation is successful.",
 				}
 				pipelineTrigger.Status.ImagePolicy.AddOrReplaceCondition(condition)
-			}
-			if (tektondevv1.PipelineRunReason(c.GetReason()) == tektondevv1.PipelineRunReasonFailed && v1.ConditionStatus(c.Status) == v1.ConditionFalse) ||
+			} else if (tektondevv1.PipelineRunReason(c.GetReason()) == tektondevv1.PipelineRunReasonFailed && v1.ConditionStatus(c.Status) == v1.ConditionFalse) ||
 				(tektondevv1.PipelineRunReason(c.GetReason()) == tektondevv1.PipelineRunReasonCancelled) ||
 				(tektondevv1.PipelineRunReason(c.GetReason()) == tektondevv1.PipelineRunReasonTimedOut) {
 				condition := v1.Condition{
 					Type:               apis.ReconcileError,
 					LastTransitionTime: v1.Now(),
+					ObservedGeneration: pipelineTrigger.GetGeneration(),
 					Reason:             apis.ReconcileErrorReason,
 					Status:             v1.ConditionTrue,
 					Message:            "Reconciliation is successful.",
+				}
+				pipelineTrigger.Status.ImagePolicy.AddOrReplaceCondition(condition)
+			} else {
+				condition := v1.Condition{
+					Type:               apis.ReconcileInProgress,
+					LastTransitionTime: v1.Now(),
+					ObservedGeneration: pipelineTrigger.GetGeneration(),
+					Reason:             apis.ReconcileInProgress,
+					Status:             v1.ConditionTrue,
+					Message:            "Progressing",
 				}
 				pipelineTrigger.Status.ImagePolicy.AddOrReplaceCondition(condition)
 			}
@@ -143,10 +176,7 @@ func (imagepolicySubscriber ImagepolicySubscriber) IsFinished(pipelineTrigger *p
 }
 
 func (imagepolicySubscriber *ImagepolicySubscriber) ManageError(context context.Context, obj *pipelinev1alpha1.PipelineTrigger, req ctrl.Request, r client.Client, message error) (reconcile.Result, error) {
-
-	if err := r.Get(context, types.NamespacedName{Name: obj.Name, Namespace: obj.Namespace}, obj); err != nil {
-		return reconcile.Result{}, err
-	}
+	patch := client.MergeFrom(obj.DeepCopy())
 
 	condition := v1.Condition{
 		Type:               apis.ReconcileError,
@@ -159,9 +189,6 @@ func (imagepolicySubscriber *ImagepolicySubscriber) ManageError(context context.
 
 	obj.Status.ImagePolicy.AddOrReplaceCondition(condition)
 
-	err := r.Status().Update(context, obj)
-	if err != nil {
-		return reconcile.Result{}, err
-	}
-	return reconcile.Result{}, nil
+	err := r.Status().Patch(context, obj, patch)
+	return reconcile.Result{}, err
 }

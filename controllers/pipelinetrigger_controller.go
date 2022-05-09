@@ -21,7 +21,6 @@ import (
 
 	imagereflectorv1 "github.com/fluxcd/image-reflector-controller/api/v1beta1"
 	"github.com/go-logr/logr"
-	apis "github.com/jquad-group/pipeline-trigger-operator/pkg/status"
 	core "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -42,6 +41,7 @@ import (
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 	pipelinev1alpha1 "github.com/jquad-group/pipeline-trigger-operator/api/v1alpha1"
+	pipelinev1alpha1predicate "github.com/jquad-group/pipeline-trigger-operator/pkg/predicate"
 
 	sourceApi "github.com/jquad-group/pipeline-trigger-operator/pkg/source"
 	pullrequestv1alpha1 "github.com/jquad-group/pullrequest-operator/api/v1alpha1"
@@ -51,6 +51,7 @@ import (
 const (
 	sourceField             = ".spec.source.name"
 	pipelineRunField        = ".metadata.pipelinerun.name"
+	FIELD_MANAGER           = "pipelinetrigger-controller"
 	PULLREQUEST_KIND_NAME   = "PullRequest"
 	IMAGEPOLICY_KIND_NAME   = "ImagePolicy"
 	GITREPOSITORY_KIND_NAME = "GitRepository"
@@ -100,6 +101,19 @@ func (r *PipelineTriggerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, nil
 	}
 
+	patch := &unstructured.Unstructured{}
+	patch.SetGroupVersionKind(schema.GroupVersionKind{
+		Group:   pipelinev1alpha1.GroupVersion.Group,
+		Version: pipelinev1alpha1.GroupVersion.Version,
+		Kind:    "PipelineTrigger",
+	})
+	patch.SetNamespace(pipelineTrigger.GetNamespace())
+	patch.SetName(pipelineTrigger.GetName())
+	patchOptions := &client.PatchOptions{
+		FieldManager: FIELD_MANAGER,
+		Force:        pointer.Bool(true),
+	}
+
 	// check if the referenced source exists
 	sourceSubscriber := createSourceSubscriber(&pipelineTrigger)
 	if err := sourceSubscriber.Exists(ctx, pipelineTrigger, r.Client, req); err != nil {
@@ -113,41 +127,37 @@ func (r *PipelineTriggerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return sourceSubscriber.ManageError(ctx, &pipelineTrigger, req, r.Client, err)
 	}
 
-	// Get the Latest Source Event
-	gotNewEvent, err := sourceSubscriber.GetLatestEvent(ctx, &pipelineTrigger, r.Client, req)
-	if err != nil {
-		return sourceSubscriber.ManageError(ctx, &pipelineTrigger, req, r.Client, err)
-	}
-
-	if gotNewEvent {
-		// Update the status conditions
-		r.Status().Update(ctx, &pipelineTrigger)
-		return ctrl.Result{Requeue: true}, nil
-	}
-
-	prs := sourceSubscriber.CreatePipelineRunResource(&pipelineTrigger, r.Scheme)
-	for pipelineRunCnt := 0; pipelineRunCnt < len(prs); pipelineRunCnt++ {
-		instanceName, _ := pipelineTrigger.StartPipelineRun(prs[pipelineRunCnt], ctx, req)
-		newVersionMsg := "Started the pipeline " + instanceName + " in namespace " + pipelineTrigger.Namespace
-		r.recorder.Event(&pipelineTrigger, core.EventTypeNormal, "Info", newVersionMsg)
-	}
-
-	r.Status().Update(ctx, &pipelineTrigger)
-
 	var pipelineRunList tektondevv1.PipelineRunList
 	errList := r.List(ctx, &pipelineRunList, client.InNamespace(req.Namespace), client.MatchingFields{pipelineRunField: req.Name})
 	if errList != nil {
 		log.Error(errList, "Failed to list PipelineRuns in ", pipelineTrigger.Namespace, " with label ", pipelineTrigger.Name)
 	}
-	sourceSubscriber.UpdateStatus(ctx, req, &pipelineTrigger, &pipelineRunList)
 
-	/*
-		if errPatch := r.patchApply(ctx, pipelineTrigger.Status, pipelineTrigger); errPatch != nil {
-			log.Error(err, "unable to update status")
+	if !sourceSubscriber.CalculateCurrentState(ctx, &pipelineTrigger, r.Client, pipelineRunList) {
+
+		// Get the Latest Source Event
+		_, err := sourceSubscriber.GetLatestEvent(ctx, &pipelineTrigger, r.Client, req)
+		if err != nil {
+			return sourceSubscriber.ManageError(ctx, &pipelineTrigger, req, r.Client, err)
 		}
-	*/
+		// Create the PipelineRun resources
+		prs := sourceSubscriber.CreatePipelineRunResource(&pipelineTrigger, r.Scheme)
+		// Start the PipelineRun resources
+		for pipelineRunCnt := 0; pipelineRunCnt < len(prs); pipelineRunCnt++ {
+			instanceName, _ := pipelineTrigger.StartPipelineRun(prs[pipelineRunCnt], ctx, req)
+			newVersionMsg := "Started the pipeline " + instanceName + " in namespace " + pipelineTrigger.Namespace
+			r.recorder.Event(&pipelineTrigger, core.EventTypeNormal, "Info", newVersionMsg)
+		}
 
-	r.Status().Update(ctx, &pipelineTrigger)
+		patch.UnstructuredContent()["status"] = pipelineTrigger.Status
+		r.Status().Patch(ctx, patch, client.Apply, patchOptions)
+
+	}
+
+	sourceSubscriber.SetCurrentPipelineRunStatus(pipelineRunList, &pipelineTrigger)
+
+	patch.UnstructuredContent()["status"] = pipelineTrigger.Status
+	r.Status().Patch(ctx, patch, client.Apply, patchOptions)
 
 	return ctrl.Result{}, nil
 
@@ -169,7 +179,7 @@ func createSourceSubscriber(pipelineTrigger *pipelinev1alpha1.PipelineTrigger) s
 /*
 Finally, we add this reconciler to the manager, so that it gets started when the manager is started.
 Since we create dependency Tekton PipelineRuns during the reconcile, we can specify that the controller `Owns` Tekton PipelineRun.
-However the ImagePolicies, GitRepositories and PullRequests that we want to watch are not owned by the PipelineRun object.
+However the ImagePolicies, GitRepositories and PullRequests that we want to watch are not owned by the PipelineTrigger object.
 Therefore we must specify a custom way of watching those objects.
 This watch logic is complex, so we have split it into a separate method.
 */
@@ -180,7 +190,7 @@ func (r *PipelineTriggerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.recorder = mgr.GetEventRecorderFor("PipelineTrigger")
 
 	/*
-		The `source.name` field must be indexed by the manager, so that we will be able to lookup `PipelineTriggers` by a referenced `source.name` name.
+		The `sourceField` field must be indexed by the manager, so that we will be able to lookup `PipelineTriggers` by a referenced `sourceField` name.
 		This will allow for quickly answer the question:
 		- If source _x_ is updated, which PipelineTrigger are affected?
 	*/
@@ -196,6 +206,11 @@ func (r *PipelineTriggerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		return err
 	}
 
+	/*
+		The `pipelineRunField` field must be indexed by the manager, so that we will be able to lookup `PipelineTriggers` by a referenced `pipelineRunField` name.
+		This will allow for quickly answer the question:
+		- If PipelineRun _x_ is updated, which PipelineTrigger are affected?
+	*/
 	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &tektondevv1.PipelineRun{}, pipelineRunField, func(rawObj client.Object) []string {
 		// grab the job object, extract the owner...
 		job := rawObj.(*tektondevv1.PipelineRun)
@@ -221,8 +236,9 @@ func (r *PipelineTriggerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		- A Kind (i.e. `ImagePolicy, GitRepository, PullRequest`)
 		- A mapping function that converts a `ImagePolicy,GitRepository,PullRequest` object to a list of reconcile requests for `PipelineTriggers`.
 		We have separated this out into a separate function.
-		- A list of options for watching the `ImagePolicies,GitRepositories,PullRequests`
+		- A list of options for watching the `ImagePolicies,GitRepositories,PullRequests,PipelineRuns`
 		  - In our case, we only want the watch to be triggered when the LatestImage or LatestRevisioin of the ImagePolicy or GitRepository or Branches of the PullRequest is changed.
+		  - Reconcile is triggered when the status of the PipelineRun, that is owned by the controller is changed
 	*/
 
 	return ctrl.NewControllerManagedBy(mgr).
@@ -236,7 +252,7 @@ func (r *PipelineTriggerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(
 			&source.Kind{Type: &sourcev1.GitRepository{}},
 			handler.EnqueueRequestsFromMapFunc(r.findObjectsForSource),
-			builder.WithPredicates(SourceRevisionChangePredicate{}),
+			builder.WithPredicates(pipelinev1alpha1predicate.SourceRevisionChangePredicate{}),
 		).
 		Watches(
 			&source.Kind{Type: &pullrequestv1alpha1.PullRequest{}},
@@ -249,7 +265,7 @@ func (r *PipelineTriggerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				IsController: true,
 				OwnerType:    &pipelinev1alpha1.PipelineTrigger{},
 			},
-			builder.WithPredicates(StatusChangePredicate{}),
+			builder.WithPredicates(pipelinev1alpha1predicate.StatusChangePredicate{}),
 		).
 		Complete(r)
 
@@ -295,75 +311,4 @@ func (r *PipelineTriggerReconciler) existsPipelineResource(ctx context.Context, 
 	} else {
 		return nil
 	}
-}
-
-func (r *PipelineTriggerReconciler) ManageError(context context.Context, obj *pipelinev1alpha1.PipelineTrigger, req ctrl.Request, message error) (reconcile.Result, error) {
-	log := log.FromContext(context)
-	if err := r.Get(context, types.NamespacedName{Name: obj.Name, Namespace: obj.Namespace}, obj); err != nil {
-		log.Error(err, "unable to get obj")
-		return reconcile.Result{}, err
-	}
-
-	condition := metav1.Condition{
-		Type:               apis.ReconcileError,
-		LastTransitionTime: metav1.Now(),
-		ObservedGeneration: obj.GetGeneration(),
-		Reason:             apis.ReconcileErrorReason,
-		Status:             metav1.ConditionFalse,
-		Message:            message.Error(),
-	}
-	obj.AddOrReplaceCondition(condition)
-	err := r.Status().Update(context, obj)
-	if err != nil {
-		log.Error(err, "unable to update status")
-		return reconcile.Result{}, err
-	}
-	return reconcile.Result{}, nil
-}
-
-func (r *PipelineTriggerReconciler) ManageUpdate(context context.Context, obj *pipelinev1alpha1.PipelineTrigger, req ctrl.Request) (reconcile.Result, error) {
-	log := log.FromContext(context)
-	if err := r.Get(context, types.NamespacedName{Name: obj.Name, Namespace: obj.Namespace}, obj); err != nil {
-		log.Error(err, "unable to get obj")
-		return reconcile.Result{}, err
-	}
-
-	condition := metav1.Condition{
-		Type:               apis.ReconcileInProgress,
-		LastTransitionTime: metav1.Now(),
-		ObservedGeneration: obj.GetGeneration(),
-		Reason:             apis.ReconcileInProgress,
-		Status:             metav1.ConditionTrue,
-		Message:            "Progressing",
-	}
-	obj.AddOrReplaceCondition(condition)
-	err := r.Status().Update(context, obj)
-	if err != nil {
-		log.Error(err, "unable to update status")
-		return reconcile.Result{}, err
-	}
-	return reconcile.Result{Requeue: true}, nil
-}
-
-func (r *PipelineTriggerReconciler) patchApply(ctx context.Context, status pipelinev1alpha1.PipelineTriggerStatus, pipelineTrigger pipelinev1alpha1.PipelineTrigger) error {
-	errtest := r.Get(ctx, client.ObjectKey{Namespace: pipelineTrigger.GetNamespace(), Name: pipelineTrigger.GetName()}, &pipelineTrigger)
-	if errtest != nil {
-		return errtest
-	}
-	patch := &unstructured.Unstructured{}
-	patch.SetGroupVersionKind(schema.GroupVersionKind{
-		Group:   "pipeline.jquad.rocks",
-		Version: "v1alpha1",
-		Kind:    "PipelineTrigger",
-	})
-	patch.SetNamespace(pipelineTrigger.GetNamespace())
-	patch.SetName(pipelineTrigger.GetName())
-	patch.UnstructuredContent()["status"] = status
-
-	err := r.Patch(ctx, patch, client.Apply, &client.PatchOptions{
-		FieldManager: "pipelinetrigger-controller",
-		Force:        pointer.Bool(true),
-	})
-
-	return err
 }

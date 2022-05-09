@@ -14,7 +14,7 @@ type InputParam struct {
 
 func (inputParam InputParam) CreateParamGitRepository(gitRepository GitRepository) tektondevv1.Param {
 
-	if !strings.Contains(inputParam.Value, "$") {
+	if !strings.HasPrefix(inputParam.Value, "$") {
 		return tektondevv1.Param{
 			Name: inputParam.Name,
 			Value: tektondevv1.ArrayOrString{
@@ -28,7 +28,7 @@ func (inputParam InputParam) CreateParamGitRepository(gitRepository GitRepositor
 			Name: inputParam.Name,
 			Value: tektondevv1.ArrayOrString{
 				Type:      tektondevv1.ParamTypeString,
-				StringVal: res,
+				StringVal: trimQuotes(res),
 			},
 		}
 	}
@@ -36,7 +36,7 @@ func (inputParam InputParam) CreateParamGitRepository(gitRepository GitRepositor
 
 func (inputParam InputParam) CreateParamImage(imagePolicy ImagePolicy) tektondevv1.Param {
 
-	if !strings.Contains(inputParam.Value, "$") {
+	if !strings.HasPrefix(inputParam.Value, "$") {
 		return tektondevv1.Param{
 			Name: inputParam.Name,
 			Value: tektondevv1.ArrayOrString{
@@ -50,14 +50,14 @@ func (inputParam InputParam) CreateParamImage(imagePolicy ImagePolicy) tektondev
 			Name: inputParam.Name,
 			Value: tektondevv1.ArrayOrString{
 				Type:      tektondevv1.ParamTypeString,
-				StringVal: res,
+				StringVal: trimQuotes(res),
 			},
 		}
 	}
 }
 
 func (inputParam InputParam) CreateParam(currentBranch Branch) tektondevv1.Param {
-	if !strings.Contains(inputParam.Value, "$") {
+	if !strings.HasPrefix(inputParam.Value, "$") {
 		return tektondevv1.Param{
 			Name: inputParam.Name,
 			Value: tektondevv1.ArrayOrString{
@@ -71,8 +71,19 @@ func (inputParam InputParam) CreateParam(currentBranch Branch) tektondevv1.Param
 			Name: inputParam.Name,
 			Value: tektondevv1.ArrayOrString{
 				Type:      tektondevv1.ParamTypeString,
-				StringVal: res,
+				StringVal: trimQuotes(res),
 			},
 		}
 	}
+}
+
+func trimQuotes(paramValue string) string {
+	trimedParam := paramValue
+	if trimedParam[0] == '"' {
+		trimedParam = trimedParam[1:]
+	}
+	if i := len(trimedParam) - 1; trimedParam[i] == '"' {
+		trimedParam = trimedParam[:i]
+	}
+	return trimedParam
 }

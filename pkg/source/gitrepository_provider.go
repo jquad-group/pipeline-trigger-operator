@@ -2,6 +2,7 @@ package v1alpha1
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
@@ -38,6 +39,24 @@ func (gitrepositorySubscriber GitrepositorySubscriber) Exists(ctx context.Contex
 	}
 }
 
+func (gitrepositorySubscriber GitrepositorySubscriber) CalculateCurrentState(ctx context.Context, pipelineTrigger *pipelinev1alpha1.PipelineTrigger, client client.Client, pipelineRunList tektondevv1.PipelineRunList) bool {
+	foundSource := &sourcev1.GitRepository{}
+	if err := client.Get(ctx, types.NamespacedName{Name: pipelineTrigger.Spec.Source.Name, Namespace: pipelineTrigger.Namespace}, foundSource); err != nil {
+		return false
+	}
+	var gitRepository pipelinev1alpha1.GitRepository
+	gitRepository.GetGitRepository(*foundSource)
+	gitRepository.GenerateDetails()
+	gitRepositoryLabels := gitRepository.GenerateGitRepositoryLabelsAsHash()
+	gitRepositoryLabels["tekton.dev/pipeline"] = pipelineTrigger.Spec.Pipeline.Name
+	for i := range pipelineRunList.Items {
+		if fmt.Sprint(gitRepositoryLabels) == fmt.Sprint(pipelineRunList.Items[i].GetLabels()) {
+			return true
+		}
+	}
+	return false
+}
+
 func (gitrepositorySubscriber GitrepositorySubscriber) GetLatestEvent(ctx context.Context, pipelineTrigger *pipelinev1alpha1.PipelineTrigger, client client.Client, req ctrl.Request) (bool, error) {
 	foundSource := &sourcev1.GitRepository{}
 	gotNewEvent := false
@@ -67,6 +86,7 @@ func (gitrepositorySubscriber GitrepositorySubscriber) CreatePipelineRunResource
 			condition := v1.Condition{
 				Type:               apis.ReconcileUnknown,
 				LastTransitionTime: v1.Now(),
+				ObservedGeneration: pipelineTrigger.GetGeneration(),
 				Reason:             apis.ReconcileUnknown,
 				Status:             v1.ConditionTrue,
 				Message:            "Unknown",
@@ -76,6 +96,7 @@ func (gitrepositorySubscriber GitrepositorySubscriber) CreatePipelineRunResource
 			condition := v1.Condition{
 				Type:               apis.ReconcileError,
 				LastTransitionTime: v1.Now(),
+				ObservedGeneration: pipelineTrigger.GetGeneration(),
 				Reason:             apis.ReconcileErrorReason,
 				Status:             v1.ConditionFalse,
 				Message:            err.Error(),
@@ -98,7 +119,7 @@ func evaluatePipelineParamsForGitRepository(pipelineTrigger *pipelinev1alpha1.Pi
 	return true, nil
 }
 
-func (gitrepositorySubscriber GitrepositorySubscriber) UpdateStatus(ctx context.Context, req ctrl.Request, pipelineTrigger *pipelinev1alpha1.PipelineTrigger, pipelineRunList *tektondevv1.PipelineRunList) {
+func (gitrepositorySubscriber GitrepositorySubscriber) SetCurrentPipelineRunStatus(pipelineRunList tektondevv1.PipelineRunList, pipelineTrigger *pipelinev1alpha1.PipelineTrigger) {
 	for i := range pipelineRunList.Items {
 		item := pipelineRunList.Items[i]
 		pipelineTrigger.Status.GitRepository.LatestPipelineRun = item.Name
@@ -107,21 +128,32 @@ func (gitrepositorySubscriber GitrepositorySubscriber) UpdateStatus(ctx context.
 				condition := v1.Condition{
 					Type:               apis.ReconcileSuccess,
 					LastTransitionTime: v1.Now(),
+					ObservedGeneration: pipelineTrigger.GetGeneration(),
 					Reason:             apis.ReconcileSuccessReason,
 					Status:             v1.ConditionTrue,
 					Message:            "Reconciliation is successful.",
 				}
 				pipelineTrigger.Status.GitRepository.AddOrReplaceCondition(condition)
-			}
-			if (tektondevv1.PipelineRunReason(c.GetReason()) == tektondevv1.PipelineRunReasonFailed && v1.ConditionStatus(c.Status) == v1.ConditionFalse) ||
+			} else if (tektondevv1.PipelineRunReason(c.GetReason()) == tektondevv1.PipelineRunReasonFailed && v1.ConditionStatus(c.Status) == v1.ConditionFalse) ||
 				(tektondevv1.PipelineRunReason(c.GetReason()) == tektondevv1.PipelineRunReasonCancelled) ||
 				(tektondevv1.PipelineRunReason(c.GetReason()) == tektondevv1.PipelineRunReasonTimedOut) {
 				condition := v1.Condition{
 					Type:               apis.ReconcileError,
 					LastTransitionTime: v1.Now(),
+					ObservedGeneration: pipelineTrigger.GetGeneration(),
 					Reason:             apis.ReconcileErrorReason,
 					Status:             v1.ConditionTrue,
 					Message:            "Reconciliation is successful.",
+				}
+				pipelineTrigger.Status.GitRepository.AddOrReplaceCondition(condition)
+			} else {
+				condition := v1.Condition{
+					Type:               apis.ReconcileInProgress,
+					LastTransitionTime: v1.Now(),
+					ObservedGeneration: pipelineTrigger.GetGeneration(),
+					Reason:             apis.ReconcileInProgress,
+					Status:             v1.ConditionTrue,
+					Message:            "Progressing",
 				}
 				pipelineTrigger.Status.GitRepository.AddOrReplaceCondition(condition)
 			}
@@ -143,9 +175,7 @@ func (gitrepositorySubscriber GitrepositorySubscriber) IsFinished(pipelineTrigge
 
 func (gitrepositorySubscriber *GitrepositorySubscriber) ManageError(context context.Context, obj *pipelinev1alpha1.PipelineTrigger, req ctrl.Request, r client.Client, message error) (reconcile.Result, error) {
 
-	if err := r.Get(context, types.NamespacedName{Name: obj.Name, Namespace: obj.Namespace}, obj); err != nil {
-		return reconcile.Result{}, err
-	}
+	patch := client.MergeFrom(obj.DeepCopy())
 
 	condition := v1.Condition{
 		Type:               apis.ReconcileError,
@@ -156,9 +186,7 @@ func (gitrepositorySubscriber *GitrepositorySubscriber) ManageError(context cont
 		Message:            message.Error(),
 	}
 	obj.Status.GitRepository.AddOrReplaceCondition(condition)
-	err := r.Status().Update(context, obj)
-	if err != nil {
-		return reconcile.Result{}, err
-	}
-	return reconcile.Result{}, nil
+
+	err := r.Status().Patch(context, obj, patch)
+	return reconcile.Result{}, err
 }
