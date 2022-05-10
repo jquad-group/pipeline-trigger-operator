@@ -90,7 +90,7 @@ func (imagepolicySubscriber ImagepolicySubscriber) CreatePipelineRunResource(pip
 				LastTransitionTime: v1.Now(),
 				ObservedGeneration: pipelineTrigger.GetGeneration(),
 				Reason:             apis.ReconcileUnknown,
-				Status:             v1.ConditionTrue,
+				Status:             v1.ConditionUnknown,
 				Message:            "Unknown",
 			}
 			pipelineTrigger.Status.ImagePolicy.AddOrReplaceCondition(condition)
@@ -126,7 +126,7 @@ func (imagepolicySubscriber ImagepolicySubscriber) SetCurrentPipelineRunStatus(p
 		item := pipelineRunList.Items[i]
 		pipelineTrigger.Status.ImagePolicy.LatestPipelineRun = item.Name
 		for _, c := range pipelineRunList.Items[i].Status.Conditions {
-			if (tektondevv1.PipelineRunReason(c.GetReason()) == tektondevv1.PipelineRunReasonCompleted || tektondevv1.PipelineRunReason(c.GetReason()) == tektondevv1.PipelineRunReasonSuccessful) && v1.ConditionStatus(c.Status) == v1.ConditionTrue {
+			if v1.ConditionStatus(c.Status) == v1.ConditionTrue {
 				condition := v1.Condition{
 					Type:               apis.ReconcileSuccess,
 					LastTransitionTime: v1.Now(),
@@ -135,29 +135,27 @@ func (imagepolicySubscriber ImagepolicySubscriber) SetCurrentPipelineRunStatus(p
 					Status:             v1.ConditionTrue,
 					Message:            "Reconciliation is successful.",
 				}
-				pipelineTrigger.Status.ImagePolicy.AddOrReplaceCondition(condition)
-			} else if (tektondevv1.PipelineRunReason(c.GetReason()) == tektondevv1.PipelineRunReasonFailed && v1.ConditionStatus(c.Status) == v1.ConditionFalse) ||
-				(tektondevv1.PipelineRunReason(c.GetReason()) == tektondevv1.PipelineRunReasonCancelled) ||
-				(tektondevv1.PipelineRunReason(c.GetReason()) == tektondevv1.PipelineRunReasonTimedOut) {
+				pipelineTrigger.Status.GitRepository.AddOrReplaceCondition(condition)
+			} else if v1.ConditionStatus(c.Status) == v1.ConditionFalse {
 				condition := v1.Condition{
-					Type:               apis.ReconcileError,
+					Type:               apis.ReconcileSuccess,
 					LastTransitionTime: v1.Now(),
 					ObservedGeneration: pipelineTrigger.GetGeneration(),
-					Reason:             apis.ReconcileErrorReason,
-					Status:             v1.ConditionTrue,
-					Message:            "Reconciliation is successful.",
+					Reason:             c.Reason,
+					Status:             v1.ConditionFalse,
+					Message:            c.Message,
 				}
-				pipelineTrigger.Status.ImagePolicy.AddOrReplaceCondition(condition)
+				pipelineTrigger.Status.GitRepository.AddOrReplaceCondition(condition)
 			} else {
 				condition := v1.Condition{
 					Type:               apis.ReconcileInProgress,
 					LastTransitionTime: v1.Now(),
 					ObservedGeneration: pipelineTrigger.GetGeneration(),
 					Reason:             apis.ReconcileInProgress,
-					Status:             v1.ConditionTrue,
+					Status:             v1.ConditionUnknown,
 					Message:            "Progressing",
 				}
-				pipelineTrigger.Status.ImagePolicy.AddOrReplaceCondition(condition)
+				pipelineTrigger.Status.GitRepository.AddOrReplaceCondition(condition)
 			}
 		}
 	}
