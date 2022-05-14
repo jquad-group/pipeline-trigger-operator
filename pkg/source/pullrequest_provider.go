@@ -187,9 +187,18 @@ func (pullrequestSubscriber *PullrequestSubscriber) ManageError(context context.
 		Message:            message.Error(),
 	}
 
-	for key := range obj.Status.Branches.Branches {
-		tempBranch := obj.Status.Branches.Branches[key]
+	if len(obj.Status.Branches.Branches) <= 0 {
+		branches := make(map[string]pipelinev1alpha1.Branch)
+		tempBranch := pipelinev1alpha1.Branch{}
 		tempBranch.AddOrReplaceCondition(condition)
+		branches["null"] = tempBranch
+		obj.Status.Branches.Branches = branches
+	} else {
+		for key := range obj.Status.Branches.Branches {
+			tempBranch := obj.Status.Branches.Branches[key]
+			tempBranch.AddOrReplaceCondition(condition)
+			obj.Status.Branches.Branches[key] = tempBranch
+		}
 	}
 
 	err := r.Status().Patch(context, obj, patch)
