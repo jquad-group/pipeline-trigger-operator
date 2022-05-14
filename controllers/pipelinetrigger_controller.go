@@ -242,8 +242,8 @@ func (r *PipelineTriggerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	*/
 
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&pipelinev1alpha1.PipelineTrigger{}).
-		Owns(&tektondevv1.PipelineRun{}).
+		For(&pipelinev1alpha1.PipelineTrigger{},
+			builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Watches(
 			&source.Kind{Type: &imagereflectorv1.ImagePolicy{}},
 			handler.EnqueueRequestsFromMapFunc(r.findObjectsForSource),

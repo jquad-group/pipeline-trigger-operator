@@ -224,7 +224,7 @@ func (pullrequestSubscriber *PullrequestSubscriber) SetCurrentPipelineRunStatus(
 								Status:             v1.ConditionTrue,
 								Message:            "Reconciliation is successful.",
 							}
-							pipelineTrigger.Status.GitRepository.AddOrReplaceCondition(condition)
+							tempBranch.AddOrReplaceCondition(condition)
 						} else if v1.ConditionStatus(c.Status) == v1.ConditionFalse {
 							condition := v1.Condition{
 								Type:               apis.ReconcileSuccess,
@@ -234,7 +234,7 @@ func (pullrequestSubscriber *PullrequestSubscriber) SetCurrentPipelineRunStatus(
 								Status:             v1.ConditionFalse,
 								Message:            c.Message,
 							}
-							pipelineTrigger.Status.GitRepository.AddOrReplaceCondition(condition)
+							tempBranch.AddOrReplaceCondition(condition)
 						} else {
 							condition := v1.Condition{
 								Type:               apis.ReconcileInProgress,
@@ -244,7 +244,7 @@ func (pullrequestSubscriber *PullrequestSubscriber) SetCurrentPipelineRunStatus(
 								Status:             v1.ConditionUnknown,
 								Message:            "Progressing",
 							}
-							pipelineTrigger.Status.GitRepository.AddOrReplaceCondition(condition)
+							tempBranch.AddOrReplaceCondition(condition)
 						}
 					}
 					pipelineTrigger.Status.Branches.Branches[key] = tempBranch

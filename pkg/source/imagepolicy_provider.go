@@ -135,7 +135,7 @@ func (imagepolicySubscriber ImagepolicySubscriber) SetCurrentPipelineRunStatus(p
 					Status:             v1.ConditionTrue,
 					Message:            "Reconciliation is successful.",
 				}
-				pipelineTrigger.Status.GitRepository.AddOrReplaceCondition(condition)
+				pipelineTrigger.Status.ImagePolicy.AddOrReplaceCondition(condition)
 			} else if v1.ConditionStatus(c.Status) == v1.ConditionFalse {
 				condition := v1.Condition{
 					Type:               apis.ReconcileSuccess,
@@ -145,7 +145,7 @@ func (imagepolicySubscriber ImagepolicySubscriber) SetCurrentPipelineRunStatus(p
 					Status:             v1.ConditionFalse,
 					Message:            c.Message,
 				}
-				pipelineTrigger.Status.GitRepository.AddOrReplaceCondition(condition)
+				pipelineTrigger.Status.ImagePolicy.AddOrReplaceCondition(condition)
 			} else {
 				condition := v1.Condition{
 					Type:               apis.ReconcileInProgress,
@@ -155,7 +155,7 @@ func (imagepolicySubscriber ImagepolicySubscriber) SetCurrentPipelineRunStatus(p
 					Status:             v1.ConditionUnknown,
 					Message:            "Progressing",
 				}
-				pipelineTrigger.Status.GitRepository.AddOrReplaceCondition(condition)
+				pipelineTrigger.Status.ImagePolicy.AddOrReplaceCondition(condition)
 			}
 		}
 	}

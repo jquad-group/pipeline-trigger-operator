@@ -41,8 +41,8 @@ spec:
   params:
     - name: repo-url
       type: string    
-    - name: branch-name
-      type: string
+    - name: imageVersion
+      type: $.imageVersion
       description: The git branch to clone.    
     - name: imageLocation
       description: Location where the resulting docker image will be pushed to
