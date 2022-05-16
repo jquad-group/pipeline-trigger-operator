@@ -21,4 +21,5 @@ type SourceSubscriber interface {
 	ManageError(context context.Context, obj *pipelinev1alpha1.PipelineTrigger, req ctrl.Request, r client.Client, message error) (reconcile.Result, error)
 	SetCurrentPipelineRunStatus(pipelineRunList tektondevv1.PipelineRunList, obj *pipelinev1alpha1.PipelineTrigger)
 	CalculateCurrentState(ctx context.Context, pipelineTrigger *pipelinev1alpha1.PipelineTrigger, client client.Client, pipelineRunList tektondevv1.PipelineRunList) bool
+	HasIntersection(map1 map[string]string, map2 map[string]string) bool
 }

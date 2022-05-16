@@ -3,7 +3,6 @@ package v1alpha1
 import (
 	//pullrequestv1alpha1 "github.com/jquad-group/pullrequest-operator/api/v1alpha1"
 	"context"
-	"fmt"
 	"strings"
 
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -59,7 +58,7 @@ func (pullrequestSubscriber PullrequestSubscriber) CalculateCurrentState(ctx con
 			tempBranchLabels := tempBranch.GenerateBranchLabelsAsHash()
 			tempBranchLabels["tekton.dev/pipeline"] = pipelineTrigger.Spec.Pipeline.Name
 			for i := range pipelineRunList.Items {
-				if fmt.Sprint(tempBranchLabels) == fmt.Sprint(pipelineRunList.Items[i].GetLabels()) {
+				if pullrequestSubscriber.HasIntersection(tempBranchLabels, pipelineRunList.Items[i].GetLabels()) {
 					res = append(res, true)
 				}
 			}
@@ -212,7 +211,7 @@ func (pullrequestSubscriber *PullrequestSubscriber) SetCurrentPipelineRunStatus(
 			tempBranchLabels := tempBranch.GenerateBranchLabelsAsHash()
 			tempBranchLabels["tekton.dev/pipeline"] = pipelineTrigger.Spec.Pipeline.Name
 			for i := range pipelineRunList.Items {
-				if fmt.Sprint(tempBranchLabels) == fmt.Sprint(pipelineRunList.Items[i].GetLabels()) {
+				if pullrequestSubscriber.HasIntersection(tempBranchLabels, pipelineRunList.Items[i].GetLabels()) {
 					tempBranch.LatestPipelineRun = pipelineRunList.Items[i].Name
 					for _, c := range pipelineRunList.Items[i].Status.Conditions {
 						if v1.ConditionStatus(c.Status) == v1.ConditionTrue {
@@ -253,4 +252,20 @@ func (pullrequestSubscriber *PullrequestSubscriber) SetCurrentPipelineRunStatus(
 		}
 	}
 
+}
+
+func (pullrequestSubscriber *PullrequestSubscriber) HasIntersection(map1 map[string]string, map2 map[string]string) bool {
+	if len(map1) > len(map2) {
+		return false
+	}
+	for key, valueM1 := range map1 {
+		valueM2, exists := map2[key]
+		if !exists {
+			return false
+		}
+		if exists && (valueM1 != valueM2) {
+			return false
+		}
+	}
+	return true
 }

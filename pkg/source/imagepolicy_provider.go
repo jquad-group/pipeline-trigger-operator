@@ -2,7 +2,6 @@ package v1alpha1
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	imagereflectorv1 "github.com/fluxcd/image-reflector-controller/api/v1beta1"
@@ -51,7 +50,7 @@ func (imagepolicySubscriber ImagepolicySubscriber) CalculateCurrentState(ctx con
 	imagePolicyLabels := imagePolicy.GenerateImagePolicyLabelsAsHash()
 	imagePolicyLabels["tekton.dev/pipeline"] = pipelineTrigger.Spec.Pipeline.Name
 	for i := range pipelineRunList.Items {
-		if fmt.Sprint(imagePolicyLabels) == fmt.Sprint(pipelineRunList.Items[i].GetLabels()) {
+		if imagepolicySubscriber.HasIntersection(imagePolicyLabels, pipelineRunList.Items[i].GetLabels()) {
 			return true
 		}
 	}
@@ -189,4 +188,20 @@ func (imagepolicySubscriber *ImagepolicySubscriber) ManageError(context context.
 
 	err := r.Status().Patch(context, obj, patch)
 	return reconcile.Result{}, err
+}
+
+func (imagepolicySubscriber *ImagepolicySubscriber) HasIntersection(map1 map[string]string, map2 map[string]string) bool {
+	if len(map1) > len(map2) {
+		return false
+	}
+	for key, valueM1 := range map1 {
+		valueM2, exists := map2[key]
+		if !exists {
+			return false
+		}
+		if exists && (valueM1 != valueM2) {
+			return false
+		}
+	}
+	return true
 }

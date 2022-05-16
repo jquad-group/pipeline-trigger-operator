@@ -2,7 +2,6 @@ package v1alpha1
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
@@ -50,7 +49,7 @@ func (gitrepositorySubscriber GitrepositorySubscriber) CalculateCurrentState(ctx
 	gitRepositoryLabels := gitRepository.GenerateGitRepositoryLabelsAsHash()
 	gitRepositoryLabels["tekton.dev/pipeline"] = pipelineTrigger.Spec.Pipeline.Name
 	for i := range pipelineRunList.Items {
-		if fmt.Sprint(gitRepositoryLabels) == fmt.Sprint(pipelineRunList.Items[i].GetLabels()) {
+		if gitrepositorySubscriber.HasIntersection(gitRepositoryLabels, pipelineRunList.Items[i].GetLabels()) {
 			return true
 		}
 	}
@@ -187,4 +186,20 @@ func (gitrepositorySubscriber *GitrepositorySubscriber) ManageError(context cont
 
 	err := r.Status().Patch(context, obj, patch)
 	return reconcile.Result{}, err
+}
+
+func (gitrepositorySubscriber *GitrepositorySubscriber) HasIntersection(map1 map[string]string, map2 map[string]string) bool {
+	if len(map1) > len(map2) {
+		return false
+	}
+	for key, valueM1 := range map1 {
+		valueM2, exists := map2[key]
+		if !exists {
+			return false
+		}
+		if exists && (valueM1 != valueM2) {
+			return false
+		}
+	}
+	return true
 }
