@@ -257,7 +257,7 @@ func (r *PipelineTriggerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(
 			&source.Kind{Type: &pullrequestv1alpha1.PullRequest{}},
 			handler.EnqueueRequestsFromMapFunc(r.findObjectsForSource),
-			builder.WithPredicates(predicate.GenerationChangedPredicate{}),
+			builder.WithPredicates(pipelinev1alpha1predicate.PullRequestStatusChangePredicate{}),
 		).
 		Watches(
 			&source.Kind{Type: &tektondevv1.PipelineRun{}},
