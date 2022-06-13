@@ -2,6 +2,8 @@
 
 The Pipeline Trigger Operator listens for events from the Flux v2 `ImagePolicy`, `GitRepository` or from the pullrequest-operator `PullRequest` resources and creates a Tekton `PipelineRun` for a given `Pipeline` resouce.
 
+This is a new documentation.
+
 **Automated creation of Tekton PipelineRuns on events from Flux resources**
 
 Using the automated pipeline trigger operator is based on the following resources:
