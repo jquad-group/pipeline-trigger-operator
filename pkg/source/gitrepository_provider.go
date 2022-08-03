@@ -185,7 +185,7 @@ func (gitrepositorySubscriber *GitrepositorySubscriber) ManageError(context cont
 	obj.Status.GitRepository.AddOrReplaceCondition(condition)
 
 	err := r.Status().Patch(context, obj, patch)
-	return reconcile.Result{}, err
+	return reconcile.Result{Requeue: true}, err
 }
 
 func (gitrepositorySubscriber *GitrepositorySubscriber) HasIntersection(map1 map[string]string, map2 map[string]string) bool {

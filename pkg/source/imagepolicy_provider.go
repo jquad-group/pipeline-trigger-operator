@@ -187,7 +187,7 @@ func (imagepolicySubscriber *ImagepolicySubscriber) ManageError(context context.
 	obj.Status.ImagePolicy.AddOrReplaceCondition(condition)
 
 	err := r.Status().Patch(context, obj, patch)
-	return reconcile.Result{}, err
+	return reconcile.Result{Requeue: true}, err
 }
 
 func (imagepolicySubscriber *ImagepolicySubscriber) HasIntersection(map1 map[string]string, map2 map[string]string) bool {
