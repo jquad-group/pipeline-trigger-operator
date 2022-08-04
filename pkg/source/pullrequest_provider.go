@@ -201,7 +201,7 @@ func (pullrequestSubscriber *PullrequestSubscriber) ManageError(context context.
 	}
 
 	err := r.Status().Patch(context, obj, patch)
-	return reconcile.Result{}, err
+	return reconcile.Result{Requeue: true}, err
 }
 
 func (pullrequestSubscriber *PullrequestSubscriber) SetCurrentPipelineRunStatus(pipelineRunList tektondevv1.PipelineRunList, pipelineTrigger *pipelinev1alpha1.PipelineTrigger) {
