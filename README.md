@@ -74,7 +74,14 @@ the branch name can be extracted from the `Details` using the expression `$.bran
         value: $.branchName
 ```
 
+# Prerequisites 
+
+- Flux is already installed on the cluster: https://fluxcd.io/docs/installation/#install-the-flux-cli
+
+- The PullRequest Operator is already installed on the cluster: https://github.com/jquad-group/pullrequest-operator/
+
 # Installation
+
 
 Run the following command: 
 ```
