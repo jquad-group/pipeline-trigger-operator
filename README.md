@@ -209,6 +209,8 @@ pipelinetrigger-for-git-project-mkfx   True        Succeeded   2m41s       2m29s
 
 In order to build the project, run `make`.
 
+Run the ginkgo tests with `make test`.
+
 If the API source files are changed, the command `make manifests` needs to be run.
 
 Run the project locally by `make deploy`.
