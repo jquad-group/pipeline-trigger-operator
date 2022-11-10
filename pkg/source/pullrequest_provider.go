@@ -85,6 +85,15 @@ func (pullrequestSubscriber PullrequestSubscriber) GetLatestEvent(ctx context.Co
 		// add all new branches to the status of the pipelinetrigger
 		for key, value := range branches.Branches {
 			_, found := pipelineTrigger.Status.Branches.Branches[key]
+			if found {
+				newCommit := branches.Branches[key].Commit
+				oldCommit := pipelineTrigger.Status.Branches.Branches[key].Commit
+				// Pull Request was updated after it was created
+				if newCommit != oldCommit {
+					pipelineTrigger.Status.Branches.Branches[key] = value
+					gotNewEvent = true
+				}
+			}
 			if !found {
 				// add the branch
 				pipelineTrigger.Status.Branches.Branches[key] = value
