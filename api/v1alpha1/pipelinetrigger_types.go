@@ -17,9 +17,19 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"context"
+	"fmt"
 	"sort"
+	"strings"
 
+	"github.com/jquad-group/pipeline-trigger-operator/pkg/json"
+
+	"github.com/jquad-group/pipeline-trigger-operator/pkg/meta"
+	tektondevv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
+	clientsetversioned "github.com/tektoncd/pipeline/pkg/client/clientset/versioned"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 const (
@@ -46,9 +56,8 @@ type PipelineTriggerSpec struct {
 	// +kubebuilder:validation:Required
 	Source Source `json:"source"`
 
-	// Pipeline points at the object specifying the tekton pipeline
 	// +kubebuilder:validation:Required
-	Pipeline Pipeline `json:"pipeline"`
+	PipelineRunSpec tektondevv1.PipelineRunSpec `json:"pipelineRunSpec"`
 }
 
 // PipelineTriggerStatus defines the observed state of PipelineTrigger
@@ -136,4 +145,195 @@ type PipelineTriggerList struct {
 
 func init() {
 	SchemeBuilder.Register(&PipelineTrigger{}, &PipelineTriggerList{})
+}
+
+func (pipelineTrigger *PipelineTrigger) createPipelineRef() *tektondevv1.PipelineRef {
+	return &tektondevv1.PipelineRef{
+		Name: pipelineTrigger.Spec.PipelineRunSpec.PipelineRef.Name,
+	}
+}
+
+func (pipelineTrigger *PipelineTrigger) createParams(currentBranch Branch) []tektondevv1.Param {
+
+	var pipelineParams []tektondevv1.Param
+	for paramNr := 0; paramNr < len(pipelineTrigger.Spec.PipelineRunSpec.Params); paramNr++ {
+		pipelineParams = append(pipelineParams, CreateParam(pipelineTrigger.Spec.PipelineRunSpec.Params[paramNr], currentBranch))
+	}
+	return pipelineParams
+}
+
+func (pipelineTrigger *PipelineTrigger) createParamsGitRepository(gitRepository GitRepository) []tektondevv1.Param {
+
+	var pipelineParams []tektondevv1.Param
+	for paramNr := 0; paramNr < len(pipelineTrigger.Spec.PipelineRunSpec.Params); paramNr++ {
+		pipelineParams = append(pipelineParams, CreateParamGitRepository(pipelineTrigger.Spec.PipelineRunSpec.Params[paramNr], gitRepository))
+	}
+	return pipelineParams
+}
+
+func (pipelineTrigger *PipelineTrigger) createParamsImagePolicy(imagePolicy ImagePolicy) []tektondevv1.Param {
+
+	var pipelineParams []tektondevv1.Param
+	for paramNr := 0; paramNr < len(pipelineTrigger.Spec.PipelineRunSpec.Params); paramNr++ {
+		pipelineParams = append(pipelineParams, CreateParamImage(pipelineTrigger.Spec.PipelineRunSpec.Params[paramNr], imagePolicy))
+	}
+	return pipelineParams
+}
+
+func (pipelineTrigger *PipelineTrigger) CreatePipelineRunResourceForBranch(currentBranch Branch, labels map[string]string) *tektondevv1.PipelineRun {
+	pipelineRunTypeMeta := meta.TypeMeta("PipelineRun", "tekton.dev/v1beta1")
+	pr := &tektondevv1.PipelineRun{
+		TypeMeta: pipelineRunTypeMeta,
+		ObjectMeta: metav1.ObjectMeta{
+			GenerateName: currentBranch.Rewrite() + "-",
+			Namespace:    pipelineTrigger.Namespace,
+			Labels:       labels,
+		},
+		Spec: tektondevv1.PipelineRunSpec{
+			ServiceAccountName: pipelineTrigger.Spec.PipelineRunSpec.ServiceAccountName,
+			PipelineRef:        pipelineTrigger.createPipelineRef(),
+			Params:             pipelineTrigger.createParams(currentBranch),
+			Workspaces:         pipelineTrigger.Spec.PipelineRunSpec.Workspaces,
+			PodTemplate:        pipelineTrigger.Spec.PipelineRunSpec.PodTemplate,
+		},
+	}
+
+	return pr
+}
+
+func (pipelineTrigger *PipelineTrigger) CreatePipelineRunResourceForGit() *tektondevv1.PipelineRun {
+	pipelineRunTypeMeta := meta.TypeMeta("PipelineRun", "tekton.dev/v1beta1")
+	pr := &tektondevv1.PipelineRun{
+		TypeMeta: pipelineRunTypeMeta,
+		ObjectMeta: metav1.ObjectMeta{
+			GenerateName: pipelineTrigger.Status.GitRepository.Rewrite() + "-",
+			Namespace:    pipelineTrigger.Namespace,
+			Labels:       pipelineTrigger.Status.GitRepository.GenerateGitRepositoryLabelsAsHash(),
+		},
+		Spec: tektondevv1.PipelineRunSpec{
+			ServiceAccountName: pipelineTrigger.Spec.PipelineRunSpec.ServiceAccountName,
+			PipelineRef:        pipelineTrigger.createPipelineRef(),
+			Params:             pipelineTrigger.createParamsGitRepository(pipelineTrigger.Status.GitRepository),
+			Workspaces:         pipelineTrigger.Spec.PipelineRunSpec.Workspaces,
+			PodTemplate:        pipelineTrigger.Spec.PipelineRunSpec.PodTemplate,
+		},
+	}
+	return pr
+}
+
+func (pipelineTrigger *PipelineTrigger) CreatePipelineRunResourceForImage() *tektondevv1.PipelineRun {
+	pipelineRunTypeMeta := meta.TypeMeta("PipelineRun", "tekton.dev/v1beta1")
+	pr := &tektondevv1.PipelineRun{
+		TypeMeta: pipelineRunTypeMeta,
+		ObjectMeta: metav1.ObjectMeta{
+			GenerateName: pipelineTrigger.Status.ImagePolicy.Rewrite() + "-",
+			Namespace:    pipelineTrigger.Namespace,
+			Labels:       pipelineTrigger.Status.ImagePolicy.GenerateImagePolicyLabelsAsHash(),
+		},
+		Spec: tektondevv1.PipelineRunSpec{
+			ServiceAccountName: pipelineTrigger.Spec.PipelineRunSpec.ServiceAccountName,
+			PipelineRef:        pipelineTrigger.createPipelineRef(),
+			Params:             pipelineTrigger.createParamsImagePolicy(pipelineTrigger.Status.ImagePolicy),
+			Workspaces:         pipelineTrigger.Spec.PipelineRunSpec.Workspaces,
+			PodTemplate:        pipelineTrigger.Spec.PipelineRunSpec.PodTemplate,
+		},
+	}
+	return pr
+}
+
+func (pipelineTrigger *PipelineTrigger) StartPipelineRun(pr *tektondevv1.PipelineRun, ctx context.Context, req ctrl.Request) (string, *tektondevv1.PipelineRun) {
+	log := log.FromContext(ctx)
+
+	cfg := ctrl.GetConfigOrDie()
+
+	tektonClient, err := clientsetversioned.NewForConfig(cfg)
+
+	if err != nil {
+		log.Info("Cannot create tekton client.")
+	}
+
+	opts := metav1.CreateOptions{}
+	prInstance, err := tektonClient.TektonV1beta1().PipelineRuns(pipelineTrigger.Namespace).Create(ctx, pr, opts)
+	if err != nil {
+		fmt.Println(err)
+		log.Info("Cannot create tekton pipelinerun")
+	}
+
+	return prInstance.Name, prInstance
+}
+
+func CreateParamGitRepository(inputParam tektondevv1.Param, gitRepository GitRepository) tektondevv1.Param {
+
+	if !strings.HasPrefix(inputParam.Value.StringVal, "$") {
+		return tektondevv1.Param{
+			Name: inputParam.Name,
+			Value: tektondevv1.ArrayOrString{
+				Type:      tektondevv1.ParamTypeString,
+				StringVal: inputParam.Value.StringVal,
+			},
+		}
+	} else {
+		res, _ := json.EvalExpr(gitRepository.Details, inputParam.Value.StringVal)
+		return tektondevv1.Param{
+			Name: inputParam.Name,
+			Value: tektondevv1.ArrayOrString{
+				Type:      tektondevv1.ParamTypeString,
+				StringVal: trimQuotes(res),
+			},
+		}
+	}
+}
+
+func CreateParamImage(inputParam tektondevv1.Param, imagePolicy ImagePolicy) tektondevv1.Param {
+
+	if !strings.HasPrefix(inputParam.Value.StringVal, "$") {
+		return tektondevv1.Param{
+			Name: inputParam.Name,
+			Value: tektondevv1.ArrayOrString{
+				Type:      tektondevv1.ParamTypeString,
+				StringVal: inputParam.Value.StringVal,
+			},
+		}
+	} else {
+		res, _ := json.EvalExpr(imagePolicy.Details, inputParam.Value.StringVal)
+		return tektondevv1.Param{
+			Name: inputParam.Name,
+			Value: tektondevv1.ArrayOrString{
+				Type:      tektondevv1.ParamTypeString,
+				StringVal: trimQuotes(res),
+			},
+		}
+	}
+}
+
+func CreateParam(inputParam tektondevv1.Param, currentBranch Branch) tektondevv1.Param {
+	if !strings.HasPrefix(inputParam.Value.StringVal, "$") {
+		return tektondevv1.Param{
+			Name: inputParam.Name,
+			Value: tektondevv1.ArrayOrString{
+				Type:      tektondevv1.ParamTypeString,
+				StringVal: inputParam.Value.StringVal,
+			},
+		}
+	} else {
+		res, _ := json.EvalExpr(currentBranch.Details, inputParam.Value.StringVal)
+		return tektondevv1.Param{
+			Name: inputParam.Name,
+			Value: tektondevv1.ArrayOrString{
+				Type:      tektondevv1.ParamTypeString,
+				StringVal: trimQuotes(res),
+			},
+		}
+	}
+}
+
+func trimQuotes(paramValue string) string {
+	trimedParam := paramValue
+	if trimedParam[0] == '"' {
+		trimedParam = trimedParam[1:]
+	}
+	if i := len(trimedParam) - 1; trimedParam[i] == '"' {
+		trimedParam = trimedParam[:i]
+	}
+	return trimedParam
 }

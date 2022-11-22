@@ -48,7 +48,7 @@ func (imagepolicySubscriber ImagepolicySubscriber) CalculateCurrentState(ctx con
 	imagePolicy.GetImagePolicy(*foundSource)
 	imagePolicy.GenerateDetails()
 	imagePolicyLabels := imagePolicy.GenerateImagePolicyLabelsAsHash()
-	imagePolicyLabels["tekton.dev/pipeline"] = pipelineTrigger.Spec.Pipeline.Name
+	imagePolicyLabels["tekton.dev/pipeline"] = pipelineTrigger.Spec.PipelineRunSpec.PipelineRef.Name
 	for i := range pipelineRunList.Items {
 		if imagepolicySubscriber.HasIntersection(imagePolicyLabels, pipelineRunList.Items[i].GetLabels()) {
 			return true
@@ -81,7 +81,7 @@ func (imagepolicySubscriber ImagepolicySubscriber) CreatePipelineRunResource(pip
 	if len(pipelineTrigger.Status.ImagePolicy.Conditions) == 0 {
 		paramsCorrectness, err := evaluatePipelineParamsForImage(pipelineTrigger)
 		if paramsCorrectness {
-			pr := pipelineTrigger.Spec.Pipeline.CreatePipelineRunResourceForImage(*pipelineTrigger)
+			pr := pipelineTrigger.CreatePipelineRunResourceForImage()
 			ctrl.SetControllerReference(pipelineTrigger, pr, r)
 			prs = append(prs, pr)
 			condition := v1.Condition{
@@ -109,9 +109,9 @@ func (imagepolicySubscriber ImagepolicySubscriber) CreatePipelineRunResource(pip
 }
 
 func evaluatePipelineParamsForImage(pipelineTrigger *pipelinev1alpha1.PipelineTrigger) (bool, error) {
-	for paramNr := 0; paramNr < len(pipelineTrigger.Spec.Pipeline.InputParams); paramNr++ {
-		if strings.Contains(pipelineTrigger.Spec.Pipeline.InputParams[paramNr].Value, "$") {
-			_, err := json.Exists(pipelineTrigger.Status.ImagePolicy.Details, pipelineTrigger.Spec.Pipeline.InputParams[paramNr].Value)
+	for paramNr := 0; paramNr < len(pipelineTrigger.Spec.PipelineRunSpec.Params); paramNr++ {
+		if strings.Contains(pipelineTrigger.Spec.PipelineRunSpec.Params[paramNr].Value.StringVal, "$") {
+			_, err := json.Exists(pipelineTrigger.Status.ImagePolicy.Details, pipelineTrigger.Spec.PipelineRunSpec.Params[paramNr].Value.StringVal)
 			if err != nil {
 				return false, err
 			}

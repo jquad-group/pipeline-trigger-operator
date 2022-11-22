@@ -22,6 +22,9 @@ import (
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	tektondevv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
@@ -60,16 +63,53 @@ var _ = Describe("PipelineTrigger controller", func() {
 			Expect(k8sClient.Create(ctx, &gitRepository)).Should(Succeed())
 
 			By("Creating a PipelineTrigger custom resource, referencing not existing Pipeline custom resource")
-			param1 := pipelinev1alpha1.InputParam{
-				Name:  "test",
-				Value: "test",
+			param1 := tektondevv1.Param{
+				Name: "test",
+				Value: tektondevv1.ArrayOrString{
+					Type:      tektondevv1.ParamTypeString,
+					StringVal: "test-1",
+				},
 			}
-			var params []pipelinev1alpha1.InputParam
+			var params []tektondevv1.Param
 			params = append(params, param1)
 
 			source := pipelinev1alpha1.Source{
 				Kind: "GitRepository",
 				Name: resourceName,
+			}
+
+			workspaceBinding := tektondevv1.WorkspaceBinding{
+				Name: "test",
+				VolumeClaimTemplate: &corev1.PersistentVolumeClaim{
+					Spec: corev1.PersistentVolumeClaimSpec{
+						AccessModes: []corev1.PersistentVolumeAccessMode{
+							corev1.PersistentVolumeAccessMode("AccessMode.")},
+						Resources: corev1.ResourceRequirements{
+							Requests: corev1.ResourceList{
+								"storage": resource.MustParse("5Gi"),
+							},
+						},
+					},
+				},
+			}
+			var workspaceBindings []tektondevv1.WorkspaceBinding
+			workspaceBindings = append(workspaceBindings, workspaceBinding)
+
+			pipelineTaskRun1 := tektondevv1.PipelineTaskRunSpec{
+				PipelineTaskName: "test",
+			}
+
+			var pipelineTaskRuns []tektondevv1.PipelineTaskRunSpec
+			pipelineTaskRuns = append(pipelineTaskRuns, pipelineTaskRun1)
+
+			pipelineRunSpec := tektondevv1.PipelineRunSpec{
+				PipelineRef: &tektondevv1.PipelineRef{
+					Name: "test",
+				},
+				ServiceAccountName: "test",
+				Params:             []tektondevv1.Param{},
+				Workspaces:         workspaceBindings,
+				TaskRunSpecs:       pipelineTaskRuns,
 			}
 
 			pipelineTrigger1 := pipelinev1alpha1.PipelineTrigger{
@@ -78,17 +118,8 @@ var _ = Describe("PipelineTrigger controller", func() {
 					Namespace: namespace,
 				},
 				Spec: pipelinev1alpha1.PipelineTriggerSpec{
-					Source: source,
-					Pipeline: pipelinev1alpha1.Pipeline{
-						Name:              resourceName,
-						SericeAccountName: "test",
-						InputParams:       params,
-						Workspace: pipelinev1alpha1.Workspace{
-							Name:       "test",
-							Size:       "5Gi",
-							AccessMode: "test",
-						},
-					},
+					Source:          source,
+					PipelineRunSpec: pipelineRunSpec,
 				},
 			}
 			Expect(k8sClient.Create(ctx, &pipelineTrigger1)).Should(Succeed())
