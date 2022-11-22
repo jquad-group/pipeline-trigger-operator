@@ -20,7 +20,7 @@ import (
 	"time"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -34,10 +34,6 @@ var _ = Describe("PipelineTrigger controller", func() {
 		resourceName = "foo-1"
 
 		namespace = "default"
-
-		timeout  = time.Second * 10
-		duration = time.Second * 10
-		interval = time.Millisecond * 250
 	)
 
 	Context("When setting up the test environment", func() {
@@ -133,7 +129,7 @@ var _ = Describe("PipelineTrigger controller", func() {
 				}
 
 				return myPipelineTrigger1.Status.GitRepository.Conditions[0].Reason, nil
-			}, timeout, interval).Should(ContainSubstring("Failed"), "Should have %s in the status", "Failed")
+			}, time.Minute, time.Second).Should(ContainSubstring("Failed"), "Should have %s in the status", "Failed")
 
 		})
 	})
