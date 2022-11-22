@@ -78,7 +78,7 @@ func (m *PipelineTrigger) SetConditions(conditions []metav1.Condition) {
 	m.Status.Conditions = conditions
 }
 
-//GetLastCondition retruns the last condition based on the condition timestamp. if no condition is present it return false.
+// GetLastCondition retruns the last condition based on the condition timestamp. if no condition is present it return false.
 func (m *PipelineTrigger) GetLastCondition() metav1.Condition {
 	if len(m.Status.Conditions) == 0 {
 		return metav1.Condition{}
