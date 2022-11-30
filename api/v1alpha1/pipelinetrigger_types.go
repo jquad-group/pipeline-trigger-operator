@@ -17,14 +17,25 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"context"
+	"fmt"
 	"sort"
+	"strings"
 
+	"github.com/jquad-group/pipeline-trigger-operator/pkg/json"
+
+	"github.com/jquad-group/pipeline-trigger-operator/pkg/meta"
+	tektondevv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
+	clientsetversioned "github.com/tektoncd/pipeline/pkg/client/clientset/versioned"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 const (
-	pipelineTriggerLabelKey   string = "pipeline.jquad.rocks"
-	pipelineTriggerLabelValue string = "pipelinetrigger"
+	pipelineTriggerLabelKey            string = "pipeline.jquad.rocks"
+	pipelineTriggerLabelValue          string = "pipelinetrigger"
+	pipelineParamDynamicVariableMarker string = "$"
 )
 
 //+kubebuilder:object:root=true
@@ -46,9 +57,9 @@ type PipelineTriggerSpec struct {
 	// +kubebuilder:validation:Required
 	Source Source `json:"source"`
 
-	// Pipeline points at the object specifying the tekton pipeline
-	// +kubebuilder:validation:Required
-	Pipeline Pipeline `json:"pipeline"`
+	// +kubebuilder:validation:Schemaless
+	// +kubebuilder:pruning:PreserveUnknownFields
+	PipelineRunSpec tektondevv1.PipelineRunSpec `json:"pipelineRunSpec"`
 }
 
 // PipelineTriggerStatus defines the observed state of PipelineTrigger
@@ -136,4 +147,105 @@ type PipelineTriggerList struct {
 
 func init() {
 	SchemeBuilder.Register(&PipelineTrigger{}, &PipelineTriggerList{})
+}
+
+func (pipelineTrigger *PipelineTrigger) createParams(details string) []tektondevv1.Param {
+
+	var pipelineParams []tektondevv1.Param
+	for paramNr := 0; paramNr < len(pipelineTrigger.Spec.PipelineRunSpec.Params); paramNr++ {
+		pipelineParams = append(pipelineParams, createParam(pipelineTrigger.Spec.PipelineRunSpec.Params[paramNr], details))
+	}
+	return pipelineParams
+}
+
+func (pipelineTrigger *PipelineTrigger) CreatePipelineRunResourceForBranch(currentBranch Branch, labels map[string]string) *tektondevv1.PipelineRun {
+	pipelineRunTypeMeta := meta.TypeMeta("PipelineRun", "tekton.dev/v1beta1")
+	pipelineTrigger.Spec.PipelineRunSpec.Params = pipelineTrigger.createParams(currentBranch.Details)
+	pr := &tektondevv1.PipelineRun{
+		TypeMeta: pipelineRunTypeMeta,
+		ObjectMeta: metav1.ObjectMeta{
+			GenerateName: currentBranch.Rewrite() + "-",
+			Namespace:    pipelineTrigger.Namespace,
+			Labels:       labels,
+		},
+		Spec: pipelineTrigger.Spec.PipelineRunSpec,
+	}
+
+	return pr
+}
+
+func (pipelineTrigger *PipelineTrigger) CreatePipelineRunResource() *tektondevv1.PipelineRun {
+	pipelineRunTypeMeta := meta.TypeMeta("PipelineRun", "tekton.dev/v1beta1")
+	var pipelineRunLabels map[string]string
+	var pipelineRunName string
+
+	if pipelineTrigger.Spec.Source.Kind == "GitRepository" {
+		pipelineTrigger.Spec.PipelineRunSpec.Params = pipelineTrigger.createParams(pipelineTrigger.Status.GitRepository.Details)
+		pipelineRunLabels = pipelineTrigger.Status.GitRepository.GenerateGitRepositoryLabelsAsHash()
+		pipelineRunName = pipelineTrigger.Status.GitRepository.Rewrite() + "-"
+	}
+
+	if pipelineTrigger.Spec.Source.Kind == "ImagePolicy" {
+		pipelineTrigger.Spec.PipelineRunSpec.Params = pipelineTrigger.createParams(pipelineTrigger.Status.ImagePolicy.Details)
+		pipelineRunLabels = pipelineTrigger.Status.ImagePolicy.GenerateImagePolicyLabelsAsHash()
+		pipelineRunName = pipelineTrigger.Status.ImagePolicy.Rewrite() + "-"
+	}
+
+	pr := &tektondevv1.PipelineRun{
+		TypeMeta: pipelineRunTypeMeta,
+		ObjectMeta: metav1.ObjectMeta{
+			GenerateName: pipelineRunName,
+			Namespace:    pipelineTrigger.Namespace,
+			Labels:       pipelineRunLabels,
+		},
+		Spec: pipelineTrigger.Spec.PipelineRunSpec,
+	}
+	return pr
+}
+
+func (pipelineTrigger *PipelineTrigger) StartPipelineRun(pr *tektondevv1.PipelineRun, ctx context.Context, req ctrl.Request) (string, *tektondevv1.PipelineRun) {
+	log := log.FromContext(ctx)
+
+	cfg := ctrl.GetConfigOrDie()
+
+	tektonClient, err := clientsetversioned.NewForConfig(cfg)
+
+	if err != nil {
+		log.Info("Cannot create tekton client.")
+	}
+
+	opts := metav1.CreateOptions{}
+	prInstance, err := tektonClient.TektonV1beta1().PipelineRuns(pipelineTrigger.Namespace).Create(ctx, pr, opts)
+	if err != nil {
+		fmt.Println(err)
+		log.Info("Cannot create tekton pipelinerun")
+	}
+
+	return prInstance.Name, prInstance
+}
+
+func createParam(inputParam tektondevv1.Param, details string) tektondevv1.Param {
+	if !strings.HasPrefix(inputParam.Value.StringVal, pipelineParamDynamicVariableMarker) {
+		return inputParam
+	} else {
+		res, _ := json.EvalExpr(details, inputParam.Value.StringVal)
+		return tektondevv1.Param{
+			Name: inputParam.Name,
+			Value: tektondevv1.ArrayOrString{
+				Type:      tektondevv1.ParamTypeString,
+				StringVal: trimQuotes(res),
+			},
+		}
+	}
+}
+
+func trimQuotes(paramValue string) string {
+	trimedParam := paramValue
+	if trimedParam[0] == '"' {
+		trimedParam = trimedParam[1:]
+	}
+	if i := len(trimedParam) - 1; trimedParam[i] == '"' {
+		trimedParam = trimedParam[:i]
+	}
+	return trimedParam
 }

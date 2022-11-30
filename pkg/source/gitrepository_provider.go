@@ -47,7 +47,7 @@ func (gitrepositorySubscriber GitrepositorySubscriber) CalculateCurrentState(ctx
 	gitRepository.GetGitRepository(*foundSource)
 	gitRepository.GenerateDetails()
 	gitRepositoryLabels := gitRepository.GenerateGitRepositoryLabelsAsHash()
-	gitRepositoryLabels["tekton.dev/pipeline"] = pipelineTrigger.Spec.Pipeline.Name
+	gitRepositoryLabels["tekton.dev/pipeline"] = pipelineTrigger.Spec.PipelineRunSpec.PipelineRef.Name
 	for i := range pipelineRunList.Items {
 		if gitrepositorySubscriber.HasIntersection(gitRepositoryLabels, pipelineRunList.Items[i].GetLabels()) {
 			return true
@@ -79,7 +79,7 @@ func (gitrepositorySubscriber GitrepositorySubscriber) CreatePipelineRunResource
 	if len(pipelineTrigger.Status.GitRepository.Conditions) == 0 {
 		paramsCorrectness, err := evaluatePipelineParamsForGitRepository(pipelineTrigger)
 		if paramsCorrectness {
-			pr := pipelineTrigger.Spec.Pipeline.CreatePipelineRunResourceForGit(*pipelineTrigger)
+			pr := pipelineTrigger.CreatePipelineRunResource()
 			ctrl.SetControllerReference(pipelineTrigger, pr, r)
 			prs = append(prs, pr)
 			condition := v1.Condition{
@@ -107,9 +107,9 @@ func (gitrepositorySubscriber GitrepositorySubscriber) CreatePipelineRunResource
 }
 
 func evaluatePipelineParamsForGitRepository(pipelineTrigger *pipelinev1alpha1.PipelineTrigger) (bool, error) {
-	for paramNr := 0; paramNr < len(pipelineTrigger.Spec.Pipeline.InputParams); paramNr++ {
-		if strings.Contains(pipelineTrigger.Spec.Pipeline.InputParams[paramNr].Value, "$") {
-			_, err := json.Exists(pipelineTrigger.Status.GitRepository.Details, pipelineTrigger.Spec.Pipeline.InputParams[paramNr].Value)
+	for paramNr := 0; paramNr < len(pipelineTrigger.Spec.PipelineRunSpec.Params); paramNr++ {
+		if strings.Contains(pipelineTrigger.Spec.PipelineRunSpec.Params[paramNr].Value.StringVal, "$") {
+			_, err := json.Exists(pipelineTrigger.Status.GitRepository.Details, pipelineTrigger.Spec.PipelineRunSpec.Params[paramNr].Value.StringVal)
 			if err != nil {
 				return false, err
 			}

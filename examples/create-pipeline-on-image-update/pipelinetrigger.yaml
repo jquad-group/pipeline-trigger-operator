@@ -7,17 +7,29 @@ spec:
   source: 
     kind: ImagePolicy
     name: latest-image-notifier
-  pipeline: 
-    name: build-and-push-microservice-on-base-image-update
+  pipelineRunSpec:
+    params:
+    - name: "repo-url"
+      value: "https://github.com/jquad-group/microservice.git"
+    - name: "branch-name"
+      value: "main"
+    - name: "imageLocation"
+      value: $.repositoryName  
+    pipelineRef: 
+      name: build-and-push-microservice-on-base-image-update
     serviceAccountName: default
-    workspace:
-      name: workspace
-      size: 1Gi
-      accessMode: ReadWriteOnce
-    inputParams:
-      - name: "repo-url"
-        value: "https://github.com/jquad-group/microservice.git"
-      - name: "branch-name"
-        value: "main"
-      - name: "imageLocation"
-        value: $.repositoryName
+    podTemplate:
+      securityContext:
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+    workspaces:
+    - name: workspace
+      volumeClaimTemplate:
+        spec:
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 16Mi
+          volumeMode: Filesystem

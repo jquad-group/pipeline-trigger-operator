@@ -305,7 +305,7 @@ func (r *PipelineTriggerReconciler) findObjectsForSource(source client.Object) [
 func (r *PipelineTriggerReconciler) existsPipelineResource(ctx context.Context, pipelineTrigger pipelinev1alpha1.PipelineTrigger) error {
 	// check if the referenced tekton pipeline exists
 	foundTektonPipeline := &tektondevv1.Pipeline{}
-	err := r.Get(ctx, types.NamespacedName{Name: pipelineTrigger.Spec.Pipeline.Name, Namespace: pipelineTrigger.Namespace}, foundTektonPipeline)
+	err := r.Get(ctx, types.NamespacedName{Name: pipelineTrigger.Spec.PipelineRunSpec.PipelineRef.Name, Namespace: pipelineTrigger.Namespace}, foundTektonPipeline)
 	if err != nil {
 		return err
 	} else {

@@ -35,52 +35,8 @@ spec:
           spec:
             description: PipelineTriggerSpec defines the desired state of PipelineTrigger
             properties:
-              pipeline:
-                description: Pipeline points at the object specifying the tekton pipeline
-                properties:
-                  inputParams:
-                    items:
-                      properties:
-                        name:
-                          type: string
-                        value:
-                          type: string
-                      required:
-                      - name
-                      - value
-                      type: object
-                    type: array
-                  name:
-                    type: string
-                  securityContext:
-                    properties:
-                      fsGroup:
-                        format: int64
-                        type: integer
-                      runAsGroup:
-                        format: int64
-                        type: integer
-                      runAsUser:
-                        format: int64
-                        type: integer
-                    type: object
-                  serviceAccountName:
-                    type: string
-                  workspace:
-                    properties:
-                      accessMode:
-                        type: string
-                      name:
-                        type: string
-                      size:
-                        type: string
-                    type: object
-                required:
-                - inputParams
-                - name
-                - serviceAccountName
-                - workspace
-                type: object
+              pipelineRunSpec:
+                x-kubernetes-preserve-unknown-fields: true
               source:
                 description: Source points at the object specifying the Image Policy,
                   Git Repository or Pull Request found
@@ -102,7 +58,7 @@ spec:
                 - name
                 type: object
             required:
-            - pipeline
+            - pipelineRunSpec
             - source
             type: object
           status:

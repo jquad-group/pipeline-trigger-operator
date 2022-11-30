@@ -56,7 +56,7 @@ func (pullrequestSubscriber PullrequestSubscriber) CalculateCurrentState(ctx con
 		for key := range branches.Branches {
 			tempBranch := branches.Branches[key]
 			tempBranchLabels := tempBranch.GenerateBranchLabelsAsHash()
-			tempBranchLabels["tekton.dev/pipeline"] = pipelineTrigger.Spec.Pipeline.Name
+			tempBranchLabels["tekton.dev/pipeline"] = pipelineTrigger.Spec.PipelineRunSpec.PipelineRef.Name
 			for i := range pipelineRunList.Items {
 				if pullrequestSubscriber.HasIntersection(tempBranchLabels, pipelineRunList.Items[i].GetLabels()) {
 					res = append(res, true)
@@ -123,7 +123,7 @@ func (pullrequestSubscriber PullrequestSubscriber) CreatePipelineRunResource(pip
 		if len(tempBranch.Conditions) == 0 {
 			paramsCorrectness, err := evaluatePipelineParams(pipelineTrigger, tempBranch)
 			if paramsCorrectness {
-				pr := pipelineTrigger.Spec.Pipeline.CreatePipelineRunResourceForBranch(*pipelineTrigger, tempBranch, tempBranch.GenerateBranchLabelsAsHash())
+				pr := pipelineTrigger.CreatePipelineRunResourceForBranch(tempBranch, tempBranch.GenerateBranchLabelsAsHash())
 				ctrl.SetControllerReference(pipelineTrigger, pr, r)
 				prs = append(prs, pr)
 				condition := v1.Condition{
@@ -157,9 +157,9 @@ func (pullrequestSubscriber PullrequestSubscriber) CreatePipelineRunResource(pip
 }
 
 func evaluatePipelineParams(pipelineTrigger *pipelinev1alpha1.PipelineTrigger, currentBranch pipelinev1alpha1.Branch) (bool, error) {
-	for paramNr := 0; paramNr < len(pipelineTrigger.Spec.Pipeline.InputParams); paramNr++ {
-		if strings.Contains(pipelineTrigger.Spec.Pipeline.InputParams[paramNr].Value, "$") {
-			_, err := json.Exists(currentBranch.Details, pipelineTrigger.Spec.Pipeline.InputParams[paramNr].Value)
+	for paramNr := 0; paramNr < len(pipelineTrigger.Spec.PipelineRunSpec.Params); paramNr++ {
+		if strings.Contains(pipelineTrigger.Spec.PipelineRunSpec.Params[paramNr].Value.StringVal, "$") {
+			_, err := json.Exists(currentBranch.Details, pipelineTrigger.Spec.PipelineRunSpec.Params[paramNr].Value.StringVal)
 			if err != nil {
 				return false, err
 			}
@@ -218,7 +218,7 @@ func (pullrequestSubscriber *PullrequestSubscriber) SetCurrentPipelineRunStatus(
 		for key := range pipelineTrigger.Status.Branches.Branches {
 			tempBranch := pipelineTrigger.Status.Branches.Branches[key]
 			tempBranchLabels := tempBranch.GenerateBranchLabelsAsHash()
-			tempBranchLabels["tekton.dev/pipeline"] = pipelineTrigger.Spec.Pipeline.Name
+			tempBranchLabels["tekton.dev/pipeline"] = pipelineTrigger.Spec.PipelineRunSpec.PipelineRef.Name
 			for i := range pipelineRunList.Items {
 				if pullrequestSubscriber.HasIntersection(tempBranchLabels, pipelineRunList.Items[i].GetLabels()) {
 					tempBranch.LatestPipelineRun = pipelineRunList.Items[i].Name

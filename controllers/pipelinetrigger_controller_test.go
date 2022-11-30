@@ -22,6 +22,7 @@ import (
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	tektondevv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
@@ -56,11 +57,14 @@ var _ = Describe("PipelineTrigger controller", func() {
 			Expect(k8sClient.Create(ctx, &gitRepository)).Should(Succeed())
 
 			By("Creating a PipelineTrigger custom resource, referencing not existing Pipeline custom resource")
-			param1 := pipelinev1alpha1.InputParam{
-				Name:  "test",
-				Value: "test",
+			param1 := tektondevv1.Param{
+				Name: "test",
+				Value: tektondevv1.ArrayOrString{
+					Type:      tektondevv1.ParamTypeString,
+					StringVal: "test",
+				},
 			}
-			var params []pipelinev1alpha1.InputParam
+			var params []tektondevv1.Param
 			params = append(params, param1)
 
 			source := pipelinev1alpha1.Source{
@@ -75,15 +79,11 @@ var _ = Describe("PipelineTrigger controller", func() {
 				},
 				Spec: pipelinev1alpha1.PipelineTriggerSpec{
 					Source: source,
-					Pipeline: pipelinev1alpha1.Pipeline{
-						Name:              resourceName,
-						SericeAccountName: "test",
-						InputParams:       params,
-						Workspace: pipelinev1alpha1.Workspace{
-							Name:       "test",
-							Size:       "5Gi",
-							AccessMode: "test",
+					PipelineRunSpec: tektondevv1.PipelineRunSpec{
+						PipelineRef: &tektondevv1.PipelineRef{
+							Name: "test",
 						},
+						Params: params,
 					},
 				},
 			}
