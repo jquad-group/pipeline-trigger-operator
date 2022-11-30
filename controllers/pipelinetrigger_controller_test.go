@@ -20,11 +20,9 @@ import (
 	"time"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	tektondevv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
@@ -37,10 +35,6 @@ var _ = Describe("PipelineTrigger controller", func() {
 		resourceName = "foo-1"
 
 		namespace = "default"
-
-		timeout  = time.Second * 10
-		duration = time.Second * 10
-		interval = time.Millisecond * 250
 	)
 
 	Context("When setting up the test environment", func() {
@@ -67,7 +61,7 @@ var _ = Describe("PipelineTrigger controller", func() {
 				Name: "test",
 				Value: tektondevv1.ArrayOrString{
 					Type:      tektondevv1.ParamTypeString,
-					StringVal: "test-1",
+					StringVal: "test",
 				},
 			}
 			var params []tektondevv1.Param
@@ -78,48 +72,19 @@ var _ = Describe("PipelineTrigger controller", func() {
 				Name: resourceName,
 			}
 
-			workspaceBinding := tektondevv1.WorkspaceBinding{
-				Name: "test",
-				VolumeClaimTemplate: &corev1.PersistentVolumeClaim{
-					Spec: corev1.PersistentVolumeClaimSpec{
-						AccessModes: []corev1.PersistentVolumeAccessMode{
-							corev1.PersistentVolumeAccessMode("AccessMode.")},
-						Resources: corev1.ResourceRequirements{
-							Requests: corev1.ResourceList{
-								"storage": resource.MustParse("5Gi"),
-							},
-						},
-					},
-				},
-			}
-			var workspaceBindings []tektondevv1.WorkspaceBinding
-			workspaceBindings = append(workspaceBindings, workspaceBinding)
-
-			pipelineTaskRun1 := tektondevv1.PipelineTaskRunSpec{
-				PipelineTaskName: "test",
-			}
-
-			var pipelineTaskRuns []tektondevv1.PipelineTaskRunSpec
-			pipelineTaskRuns = append(pipelineTaskRuns, pipelineTaskRun1)
-
-			pipelineRunSpec := tektondevv1.PipelineRunSpec{
-				PipelineRef: &tektondevv1.PipelineRef{
-					Name: "test",
-				},
-				ServiceAccountName: "test",
-				Params:             []tektondevv1.Param{},
-				Workspaces:         workspaceBindings,
-				TaskRunSpecs:       pipelineTaskRuns,
-			}
-
 			pipelineTrigger1 := pipelinev1alpha1.PipelineTrigger{
 				ObjectMeta: v1.ObjectMeta{
 					Name:      resourceName,
 					Namespace: namespace,
 				},
 				Spec: pipelinev1alpha1.PipelineTriggerSpec{
-					Source:          source,
-					PipelineRunSpec: pipelineRunSpec,
+					Source: source,
+					PipelineRunSpec: tektondevv1.PipelineRunSpec{
+						PipelineRef: &tektondevv1.PipelineRef{
+							Name: "test",
+						},
+						Params: params,
+					},
 				},
 			}
 			Expect(k8sClient.Create(ctx, &pipelineTrigger1)).Should(Succeed())
@@ -164,7 +129,7 @@ var _ = Describe("PipelineTrigger controller", func() {
 				}
 
 				return myPipelineTrigger1.Status.GitRepository.Conditions[0].Reason, nil
-			}, timeout, interval).Should(ContainSubstring("Failed"), "Should have %s in the status", "Failed")
+			}, time.Minute, time.Second).Should(ContainSubstring("Failed"), "Should have %s in the status", "Failed")
 
 		})
 	})
