@@ -1,0 +1,31 @@
+# https://github.com/google/go-github/blob/master/github/pulls.go
+# https://github.com/rancher/rke2/issues/2156
+# https://github.com/google/go-github/blob/master/github/examples_test.go
+# https://github.com/gfleury/go-bitbucket-v1
+apiVersion: v1
+data:
+  accessToken: Z2hwX1hqbmtoYTZTMGNoa0p5dnRZZHlJRE5yNDNpODRIMTNQM0VOeA==
+kind: Secret
+metadata:
+  name: github-secret
+  namespace: jq-example-pr
+type: Opaque
+---
+apiVersion: pipeline.jquad.rocks/v1alpha1
+kind: PullRequest
+metadata:
+  name: pullrequest-github-sample
+  namespace: jq-example-pr
+spec:
+  gitProvider:
+    provider: Github
+    secretRef: github-secret
+    insecureSkipVerify: false
+    github:
+      url: https://github.com/rannox/microservice.git
+      owner: rannox
+      repository: microservice
+  targetBranch: 
+    name: refs/heads/main
+  interval: 1m
+  # TODO(user): Add fields here

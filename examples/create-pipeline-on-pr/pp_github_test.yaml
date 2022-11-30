@@ -1,0 +1,57 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: clone
+  namespace: jq-example-pr
+spec:
+  steps:
+    - name: clone
+      image: ubuntu
+      command:
+        - echo
+      args:
+        - "clone"
+---
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: assemble-and-push
+  namespace: jq-example-pr
+spec:
+  steps:
+    - name: assemble-and-push
+      image: ubuntu
+      command:
+        - echo
+      args:
+        - "assemble-and-push"        
+---
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: build-and-push-microservice-on-pr
+  namespace: jq-example-pr
+spec:
+  workspaces:
+    - name: workspace
+  params:
+    - name: repo-url
+      type: string    
+    - name: branch-name
+      type: string
+      description: The git branch to clone.    
+    - name: imageLocation
+      description: Location where the resulting docker image will be pushed to
+      type: string
+  tasks:
+    - name: clone
+      taskRef:
+        name: clone
+        kind: Task
+    - name: assemble-and-push
+      taskRef:
+        name: assemble-and-push
+        kind: Task
+      runAfter:
+        - clone
+---

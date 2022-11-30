@@ -25,30 +25,38 @@ metadata:
   name: pipelinetrigger-sample-image
   namespace: jq-example-namespace
 spec:
-  # Source can be both ImagePolicy as well as GitRepository
+  # Source can be ImagePolicy, GitRepository, or PullRequest
   # The operator subscribes for events from these resources
   source: 
     kind: ImagePolicy
     name: latest-image-notifier
-  # The configuration of the Tekton Pipeline 
-  pipeline: 
+  # The PipelineRunSpec of Tekton
+  # See the Tekton API: https://tekton.dev/docs/pipelines/pipeline-api/#tekton.dev/v1beta1.PipelineRun 
+  pipelineRunSpec: 
     # The name of Pipeline that is used for the creation of the PipelineRun resources
-    name: build-and-push-pipeline
+    pipelineRef:
+      name: build-and-push-pipeline
     # Your kubernetes service account name
     serviceAccountName: build-bot
     # The workspace for the tekton pipeline
-    workspace:
-      name: workspace
-      size: 1Gi
-      accessMode: ReadWriteOnce
+    workspaces:
+    - name: workspace
+      volumeClaimTemplate:
+        spec:
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 16Mi
+          volumeMode: Filesystem
     # The specific input parameters for the pipeline that is used for the creation of the PipelineRun 
-    inputParams:
-      - name: "repo-url"
-        value: "https://github.com/my-project.git"
-      - name: "branch-name"
-        value: "main" # or JSON path expression, e.g. $.imageName
-      - name: "commit-id"
-        value: "03da4fdbf8f3e027fb56dd0d96244c951a24f2b4" # or JSON path expression - commit id taken from the Flux Gitrepository resource
+    params:
+    - name: "repo-url"
+      value: "https://github.com/my-project.git"
+    - name: "branch-name"
+      value: "main" # or JSON path expression, e.g. $.imageName
+    - name: "commit-id"
+      value: "03da4fdbf8f3e027fb56dd0d96244c951a24f2b4" # or JSON path expression - commit id taken from the Flux Gitrepository resource
 ```
 
 ## Using dynamic input parameters for the pipeline
@@ -69,9 +77,9 @@ Status:
 the branch name can be extracted from the `Details` using the expression `$.branchName` as a input parameter for the pipeline:
 
 ```
-    inputParams:
-      - name: "branch-name"
-        value: $.branchName
+    params:
+    - name: "branch-name"
+      value: $.branchName
 ```
 
 # Prerequisites 

@@ -7,23 +7,31 @@ spec:
   source: 
     kind: GitRepository
     name: microservice-code-repo
-  pipeline: 
-    name: build-and-push-microservice-on-git-push
+  pipelineRunSpec:
+    params:
+    - name: "repo-url"
+      value: "https://github.com/jquad-group/microservice.git"
+    - name: "branch-name"
+      value: $.branchName
+    - name: "commitid"
+      value: $.commitId
+    - name: "imageLocation"
+      value: "docker.io/org/image"  
+    pipelineRef:
+      name: build-and-push-microservice-on-git-push
     serviceAccountName: default
-    securityContext:
-      runAsUser: 1001
-      runAsGroup: 1001
-      fsGroup: 1001
-    workspace:
-      name: workspace
-      size: 1Gi
-      accessMode: ReadWriteOnce
-    inputParams:
-      - name: "repo-url"
-        value: "https://github.com/jquad-group/microservice.git"
-      - name: "branch-name"
-        value: $.branchName
-      - name: "commitid"
-        value: $.commitId
-      - name: "imageLocation"
-        value: "docker.io/org/image"
+    podTemplate:
+      securityContext:
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+    workspaces:
+    - name: workspace
+      volumeClaimTemplate:
+        spec:
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 16Mi
+          volumeMode: Filesystem

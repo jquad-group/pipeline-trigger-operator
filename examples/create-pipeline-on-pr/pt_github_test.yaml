@@ -1,0 +1,29 @@
+apiVersion: pipeline.jquad.rocks/v1alpha1
+kind: PipelineTrigger
+metadata:
+  name: pipelinetrigger-for-pr
+  namespace: jq-example-pr
+spec:
+  source: 
+    kind: PullRequest
+    name: pullrequest-github-sample
+  pipeline: 
+    name: build-and-push-microservice-on-pr
+    serviceAccountName: default
+    securityContext:
+      runAsUser: 1001
+      runAsGroup: 1001
+      fsGroup: 1001
+    workspace:
+      name: workspace
+      size: 1Gi
+      accessMode: ReadWriteOnce
+    inputParams:
+    - name: "repo-url"
+      value: "https://github.com/jquad-group/microservice.git"
+    - name: "branch-name"
+      value: $.head.label
+    - name: "commitid"
+      value: "234w3q4lsammsk3134158"
+    - name: "imageLocation"
+      value: "docker.io/org/image"
