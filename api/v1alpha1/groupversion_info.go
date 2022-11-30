@@ -15,8 +15,8 @@ limitations under the License.
 */
 
 // Package v1alpha1 contains API Schema definitions for the pipeline v1alpha1 API group
-//+kubebuilder:object:generate=true
-//+groupName=pipeline.jquad.rocks
+// +kubebuilder:object:generate=true
+// +groupName=pipeline.jquad.rocks
 package v1alpha1
 
 import (

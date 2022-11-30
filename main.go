@@ -208,12 +208,12 @@ func main() {
 /*
 func getEnv(envVar string) (string, error) {
 
-	ns, found := os.LookupEnv(envVar)
-	if !found {
-		return "", fmt.Errorf("%s must be set", envVar)
+		ns, found := os.LookupEnv(envVar)
+		if !found {
+			return "", fmt.Errorf("%s must be set", envVar)
+		}
+		return ns, nil
 	}
-	return ns, nil
-}
 */
 func getEnv(envVar string) string {
 

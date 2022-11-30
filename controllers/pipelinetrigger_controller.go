@@ -272,12 +272,12 @@ func (r *PipelineTriggerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 /*
-	Because we have already created an index on the `source.name` reference field, this mapping function is quite straight forward.
-	We first need to list out all `PipelineTriggers` that use `source.name` given in the mapping function.
-	This is done by merely submitting a List request using our indexed field as the field selector.
-	When the list of `PipelineTriggers` that reference the `ImagePolicy`,`GitRepository` or `PullRequest` is found,
-	we just need to loop through the list and create a reconcile request for each one.
-	If an error occurs fetching the list, or no `PipelineTriggers` are found, then no reconcile requests will be returned.
+Because we have already created an index on the `source.name` reference field, this mapping function is quite straight forward.
+We first need to list out all `PipelineTriggers` that use `source.name` given in the mapping function.
+This is done by merely submitting a List request using our indexed field as the field selector.
+When the list of `PipelineTriggers` that reference the `ImagePolicy`,`GitRepository` or `PullRequest` is found,
+we just need to loop through the list and create a reconcile request for each one.
+If an error occurs fetching the list, or no `PipelineTriggers` are found, then no reconcile requests will be returned.
 */
 func (r *PipelineTriggerReconciler) findObjectsForSource(source client.Object) []reconcile.Request {
 	attachedPipelineTriggers := &pipelinev1alpha1.PipelineTriggerList{}
