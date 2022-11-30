@@ -33,8 +33,9 @@ import (
 )
 
 const (
-	pipelineTriggerLabelKey   string = "pipeline.jquad.rocks"
-	pipelineTriggerLabelValue string = "pipelinetrigger"
+	pipelineTriggerLabelKey            string = "pipeline.jquad.rocks"
+	pipelineTriggerLabelValue          string = "pipelinetrigger"
+	pipelineParamDynamicVariableMarker string = "$"
 )
 
 //+kubebuilder:object:root=true
@@ -148,41 +149,18 @@ func init() {
 	SchemeBuilder.Register(&PipelineTrigger{}, &PipelineTriggerList{})
 }
 
-func (pipelineTrigger *PipelineTrigger) createPipelineRef() *tektondevv1.PipelineRef {
-	return &tektondevv1.PipelineRef{
-		Name: pipelineTrigger.Spec.PipelineRunSpec.PipelineRef.Name,
-	}
-}
-
-func (pipelineTrigger *PipelineTrigger) createParams(currentBranch Branch) []tektondevv1.Param {
+func (pipelineTrigger *PipelineTrigger) createParams(details string) []tektondevv1.Param {
 
 	var pipelineParams []tektondevv1.Param
 	for paramNr := 0; paramNr < len(pipelineTrigger.Spec.PipelineRunSpec.Params); paramNr++ {
-		pipelineParams = append(pipelineParams, CreateParam(pipelineTrigger.Spec.PipelineRunSpec.Params[paramNr], currentBranch))
-	}
-	return pipelineParams
-}
-
-func (pipelineTrigger *PipelineTrigger) createParamsGitRepository(gitRepository GitRepository) []tektondevv1.Param {
-
-	var pipelineParams []tektondevv1.Param
-	for paramNr := 0; paramNr < len(pipelineTrigger.Spec.PipelineRunSpec.Params); paramNr++ {
-		pipelineParams = append(pipelineParams, CreateParamGitRepository(pipelineTrigger.Spec.PipelineRunSpec.Params[paramNr], gitRepository))
-	}
-	return pipelineParams
-}
-
-func (pipelineTrigger *PipelineTrigger) createParamsImagePolicy(imagePolicy ImagePolicy) []tektondevv1.Param {
-
-	var pipelineParams []tektondevv1.Param
-	for paramNr := 0; paramNr < len(pipelineTrigger.Spec.PipelineRunSpec.Params); paramNr++ {
-		pipelineParams = append(pipelineParams, CreateParamImage(pipelineTrigger.Spec.PipelineRunSpec.Params[paramNr], imagePolicy))
+		pipelineParams = append(pipelineParams, createParam(pipelineTrigger.Spec.PipelineRunSpec.Params[paramNr], details))
 	}
 	return pipelineParams
 }
 
 func (pipelineTrigger *PipelineTrigger) CreatePipelineRunResourceForBranch(currentBranch Branch, labels map[string]string) *tektondevv1.PipelineRun {
 	pipelineRunTypeMeta := meta.TypeMeta("PipelineRun", "tekton.dev/v1beta1")
+	pipelineTrigger.Spec.PipelineRunSpec.Params = pipelineTrigger.createParams(currentBranch.Details)
 	pr := &tektondevv1.PipelineRun{
 		TypeMeta: pipelineRunTypeMeta,
 		ObjectMeta: metav1.ObjectMeta{
@@ -190,54 +168,37 @@ func (pipelineTrigger *PipelineTrigger) CreatePipelineRunResourceForBranch(curre
 			Namespace:    pipelineTrigger.Namespace,
 			Labels:       labels,
 		},
-		Spec: tektondevv1.PipelineRunSpec{
-			ServiceAccountName: pipelineTrigger.Spec.PipelineRunSpec.ServiceAccountName,
-			PipelineRef:        pipelineTrigger.createPipelineRef(),
-			Params:             pipelineTrigger.createParams(currentBranch),
-			Workspaces:         pipelineTrigger.Spec.PipelineRunSpec.Workspaces,
-			PodTemplate:        pipelineTrigger.Spec.PipelineRunSpec.PodTemplate,
-		},
+		Spec: pipelineTrigger.Spec.PipelineRunSpec,
 	}
 
 	return pr
 }
 
-func (pipelineTrigger *PipelineTrigger) CreatePipelineRunResourceForGit() *tektondevv1.PipelineRun {
+func (pipelineTrigger *PipelineTrigger) CreatePipelineRunResource() *tektondevv1.PipelineRun {
 	pipelineRunTypeMeta := meta.TypeMeta("PipelineRun", "tekton.dev/v1beta1")
-	pr := &tektondevv1.PipelineRun{
-		TypeMeta: pipelineRunTypeMeta,
-		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: pipelineTrigger.Status.GitRepository.Rewrite() + "-",
-			Namespace:    pipelineTrigger.Namespace,
-			Labels:       pipelineTrigger.Status.GitRepository.GenerateGitRepositoryLabelsAsHash(),
-		},
-		Spec: tektondevv1.PipelineRunSpec{
-			ServiceAccountName: pipelineTrigger.Spec.PipelineRunSpec.ServiceAccountName,
-			PipelineRef:        pipelineTrigger.createPipelineRef(),
-			Params:             pipelineTrigger.createParamsGitRepository(pipelineTrigger.Status.GitRepository),
-			Workspaces:         pipelineTrigger.Spec.PipelineRunSpec.Workspaces,
-			PodTemplate:        pipelineTrigger.Spec.PipelineRunSpec.PodTemplate,
-		},
-	}
-	return pr
-}
+	var pipelineRunLabels map[string]string
+	var pipelineRunName string
 
-func (pipelineTrigger *PipelineTrigger) CreatePipelineRunResourceForImage() *tektondevv1.PipelineRun {
-	pipelineRunTypeMeta := meta.TypeMeta("PipelineRun", "tekton.dev/v1beta1")
+	if pipelineTrigger.Spec.Source.Kind == "GitRepository" {
+		pipelineTrigger.Spec.PipelineRunSpec.Params = pipelineTrigger.createParams(pipelineTrigger.Status.GitRepository.Details)
+		pipelineRunLabels = pipelineTrigger.Status.GitRepository.GenerateGitRepositoryLabelsAsHash()
+		pipelineRunName = pipelineTrigger.Status.GitRepository.Rewrite() + "-"
+	}
+
+	if pipelineTrigger.Spec.Source.Kind == "ImagePolicy" {
+		pipelineTrigger.Spec.PipelineRunSpec.Params = pipelineTrigger.createParams(pipelineTrigger.Status.ImagePolicy.Details)
+		pipelineRunLabels = pipelineTrigger.Status.ImagePolicy.GenerateImagePolicyLabelsAsHash()
+		pipelineRunName = pipelineTrigger.Status.ImagePolicy.Rewrite() + "-"
+	}
+
 	pr := &tektondevv1.PipelineRun{
 		TypeMeta: pipelineRunTypeMeta,
 		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: pipelineTrigger.Status.ImagePolicy.Rewrite() + "-",
+			GenerateName: pipelineRunName,
 			Namespace:    pipelineTrigger.Namespace,
-			Labels:       pipelineTrigger.Status.ImagePolicy.GenerateImagePolicyLabelsAsHash(),
+			Labels:       pipelineRunLabels,
 		},
-		Spec: tektondevv1.PipelineRunSpec{
-			ServiceAccountName: pipelineTrigger.Spec.PipelineRunSpec.ServiceAccountName,
-			PipelineRef:        pipelineTrigger.createPipelineRef(),
-			Params:             pipelineTrigger.createParamsImagePolicy(pipelineTrigger.Status.ImagePolicy),
-			Workspaces:         pipelineTrigger.Spec.PipelineRunSpec.Workspaces,
-			PodTemplate:        pipelineTrigger.Spec.PipelineRunSpec.PodTemplate,
-		},
+		Spec: pipelineTrigger.Spec.PipelineRunSpec,
 	}
 	return pr
 }
@@ -263,61 +224,11 @@ func (pipelineTrigger *PipelineTrigger) StartPipelineRun(pr *tektondevv1.Pipelin
 	return prInstance.Name, prInstance
 }
 
-func CreateParamGitRepository(inputParam tektondevv1.Param, gitRepository GitRepository) tektondevv1.Param {
-
-	if !strings.HasPrefix(inputParam.Value.StringVal, "$") {
-		return tektondevv1.Param{
-			Name: inputParam.Name,
-			Value: tektondevv1.ArrayOrString{
-				Type:      tektondevv1.ParamTypeString,
-				StringVal: inputParam.Value.StringVal,
-			},
-		}
+func createParam(inputParam tektondevv1.Param, details string) tektondevv1.Param {
+	if !strings.HasPrefix(inputParam.Value.StringVal, pipelineParamDynamicVariableMarker) {
+		return inputParam
 	} else {
-		res, _ := json.EvalExpr(gitRepository.Details, inputParam.Value.StringVal)
-		return tektondevv1.Param{
-			Name: inputParam.Name,
-			Value: tektondevv1.ArrayOrString{
-				Type:      tektondevv1.ParamTypeString,
-				StringVal: trimQuotes(res),
-			},
-		}
-	}
-}
-
-func CreateParamImage(inputParam tektondevv1.Param, imagePolicy ImagePolicy) tektondevv1.Param {
-
-	if !strings.HasPrefix(inputParam.Value.StringVal, "$") {
-		return tektondevv1.Param{
-			Name: inputParam.Name,
-			Value: tektondevv1.ArrayOrString{
-				Type:      tektondevv1.ParamTypeString,
-				StringVal: inputParam.Value.StringVal,
-			},
-		}
-	} else {
-		res, _ := json.EvalExpr(imagePolicy.Details, inputParam.Value.StringVal)
-		return tektondevv1.Param{
-			Name: inputParam.Name,
-			Value: tektondevv1.ArrayOrString{
-				Type:      tektondevv1.ParamTypeString,
-				StringVal: trimQuotes(res),
-			},
-		}
-	}
-}
-
-func CreateParam(inputParam tektondevv1.Param, currentBranch Branch) tektondevv1.Param {
-	if !strings.HasPrefix(inputParam.Value.StringVal, "$") {
-		return tektondevv1.Param{
-			Name: inputParam.Name,
-			Value: tektondevv1.ArrayOrString{
-				Type:      tektondevv1.ParamTypeString,
-				StringVal: inputParam.Value.StringVal,
-			},
-		}
-	} else {
-		res, _ := json.EvalExpr(currentBranch.Details, inputParam.Value.StringVal)
+		res, _ := json.EvalExpr(details, inputParam.Value.StringVal)
 		return tektondevv1.Param{
 			Name: inputParam.Name,
 			Value: tektondevv1.ArrayOrString{
@@ -338,12 +249,3 @@ func trimQuotes(paramValue string) string {
 	}
 	return trimedParam
 }
-
-//func (pipelineTrigger *PipelineTrigger) testUnstr() {
-
-//var prSpec tektondevv1.PipelineRunSpec
-
-//	var prUnstr unstructured.Unstructured
-//	pipelineTrigger.Spec.PipelineRunSpec
-
-//}

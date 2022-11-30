@@ -81,7 +81,7 @@ func (imagepolicySubscriber ImagepolicySubscriber) CreatePipelineRunResource(pip
 	if len(pipelineTrigger.Status.ImagePolicy.Conditions) == 0 {
 		paramsCorrectness, err := evaluatePipelineParamsForImage(pipelineTrigger)
 		if paramsCorrectness {
-			pr := pipelineTrigger.CreatePipelineRunResourceForImage()
+			pr := pipelineTrigger.CreatePipelineRunResource()
 			ctrl.SetControllerReference(pipelineTrigger, pr, r)
 			prs = append(prs, pr)
 			condition := v1.Condition{

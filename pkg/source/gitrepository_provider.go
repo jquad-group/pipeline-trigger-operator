@@ -79,7 +79,7 @@ func (gitrepositorySubscriber GitrepositorySubscriber) CreatePipelineRunResource
 	if len(pipelineTrigger.Status.GitRepository.Conditions) == 0 {
 		paramsCorrectness, err := evaluatePipelineParamsForGitRepository(pipelineTrigger)
 		if paramsCorrectness {
-			pr := pipelineTrigger.CreatePipelineRunResourceForGit()
+			pr := pipelineTrigger.CreatePipelineRunResource()
 			ctrl.SetControllerReference(pipelineTrigger, pr, r)
 			prs = append(prs, pr)
 			condition := v1.Condition{
