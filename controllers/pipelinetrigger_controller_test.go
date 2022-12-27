@@ -40,8 +40,8 @@ var _ = Describe("PipelineTrigger controller", func() {
 		pipelineName        = "build-and-push"
 		namespace           = "default"
 
-		timeout  = time.Second * 50000
-		duration = time.Second * 10000
+		timeout  = time.Second * 10
+		duration = time.Second * 10
 		interval = time.Millisecond * 250
 	)
 
