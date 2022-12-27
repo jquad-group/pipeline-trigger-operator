@@ -26,9 +26,9 @@ import (
 
 	"github.com/jquad-group/pipeline-trigger-operator/pkg/meta"
 	tektondevv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
-	clientsetversioned "github.com/tektoncd/pipeline/pkg/client/clientset/versioned"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -203,25 +203,16 @@ func (pipelineTrigger *PipelineTrigger) CreatePipelineRunResource() *tektondevv1
 	return pr
 }
 
-func (pipelineTrigger *PipelineTrigger) StartPipelineRun(pr *tektondevv1.PipelineRun, ctx context.Context, req ctrl.Request) (string, *tektondevv1.PipelineRun) {
+func (pipelineTrigger *PipelineTrigger) StartPipelineRun(pr *tektondevv1.PipelineRun, ctx context.Context, req ctrl.Request, tektonClient client.Client) (string, *tektondevv1.PipelineRun) {
 	log := log.FromContext(ctx)
 
-	cfg := ctrl.GetConfigOrDie()
-
-	tektonClient, err := clientsetversioned.NewForConfig(cfg)
-
-	if err != nil {
-		log.Info("Cannot create tekton client.")
-	}
-
-	opts := metav1.CreateOptions{}
-	prInstance, err := tektonClient.TektonV1beta1().PipelineRuns(pipelineTrigger.Namespace).Create(ctx, pr, opts)
+	err := tektonClient.Create(ctx, pr)
 	if err != nil {
 		fmt.Println(err)
 		log.Info("Cannot create tekton pipelinerun")
 	}
 
-	return prInstance.Name, prInstance
+	return pr.Name, pr
 }
 
 func createParam(inputParam tektondevv1.Param, details string) tektondevv1.Param {
