@@ -150,14 +150,21 @@ func (r *PipelineTriggerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		}
 
 		patch.UnstructuredContent()["status"] = pipelineTrigger.Status
-		r.Status().Patch(ctx, patch, client.Apply, patchOptions)
+		errStatus := r.Status().Patch(ctx, patch, client.Apply, patchOptions)
+		if errStatus != nil {
+			r.recorder.Event(&pipelineTrigger, core.EventTypeWarning, "Warning", errStatus.Error())
+		}
 
 	}
 
 	sourceSubscriber.SetCurrentPipelineRunStatus(pipelineRunList, &pipelineTrigger)
 
 	patch.UnstructuredContent()["status"] = pipelineTrigger.Status
-	r.Status().Patch(ctx, patch, client.Apply, patchOptions)
+	patch.SetManagedFields(nil)
+	errStatus := r.Status().Patch(ctx, patch, client.Apply, patchOptions)
+	if errStatus != nil {
+		r.recorder.Event(&pipelineTrigger, core.EventTypeWarning, "Warning", errStatus.Error())
+	}
 
 	return ctrl.Result{}, nil
 
