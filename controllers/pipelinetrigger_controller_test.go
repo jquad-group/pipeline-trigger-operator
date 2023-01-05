@@ -36,12 +36,22 @@ import (
 	"knative.dev/pkg/apis"
 )
 
+var taskMock tektondevv1.Task
+var pipelineMock tektondevv1.Pipeline
+var gitRepository sourcev1.GitRepository
+var imagePolicy imagereflectorv1.ImagePolicy
+var pipelineTrigger0 pipelinev1alpha1.PipelineTrigger
+var pipelineTrigger1 pipelinev1alpha1.PipelineTrigger
+var pipelineTrigger2 pipelinev1alpha1.PipelineTrigger
+var pipelineTrigger3 pipelinev1alpha1.PipelineTrigger
+
 var _ = Describe("PipelineTrigger controller", func() {
 
 	const (
 		gitRepositoryName    = "git-repo-1"
 		imagePolicyName      = "image-policy-1"
 		pullRequestName      = "pr-1"
+		pipelineTriggerName0 = "pipeline-trigger-0"
 		pipelineTriggerName1 = "pipeline-trigger-1"
 		pipelineTriggerName2 = "pipeline-trigger-2"
 		pipelineTriggerName3 = "pipeline-trigger-3"
@@ -54,24 +64,190 @@ var _ = Describe("PipelineTrigger controller", func() {
 		interval = time.Millisecond * 250
 	)
 
-	Context("PipelineTrigger fails to create a PipelineRun to missing GitRepository", func() {
-		It("Should not be able to create a PipelineRun", func() {
-			By("Creating a Task custom resource")
-			ctx := context.Background()
-			taskMock := tektondevv1.Task{
-				ObjectMeta: v1.ObjectMeta{
-					Name:      taskName,
-					Namespace: namespace,
+	BeforeEach(func() {
+		taskMock = tektondevv1.Task{
+			ObjectMeta: v1.ObjectMeta{
+				Name:      taskName,
+				Namespace: namespace,
+			},
+			Spec: tektondevv1.TaskSpec{
+				Params: []tektondevv1.ParamSpec{
+					{
+						Name: taskName,
+					},
 				},
-				Spec: tektondevv1.TaskSpec{
-					Params: []tektondevv1.ParamSpec{
-						{
+			},
+		}
+
+		pipelineMock = tektondevv1.Pipeline{
+			ObjectMeta: v1.ObjectMeta{
+				Name:      pipelineName,
+				Namespace: namespace,
+			},
+			Spec: tektondevv1.PipelineSpec{
+				Tasks: []tektondevv1.PipelineTask{
+					{
+						Name: taskName,
+						TaskRef: &tektondevv1.TaskRef{
 							Name: taskName,
 						},
 					},
 				},
-			}
+			},
+		}
 
+		gitRepository = sourcev1.GitRepository{
+			ObjectMeta: v1.ObjectMeta{
+				Name:      gitRepositoryName,
+				Namespace: namespace,
+			},
+			Spec: sourcev1.GitRepositorySpec{
+				URL:      "http://github.com/org/repo.git",
+				Interval: v1.Duration{},
+			},
+		}
+
+		imagePolicy = imagereflectorv1.ImagePolicy{
+			ObjectMeta: v1.ObjectMeta{
+				Name:      imagePolicyName,
+				Namespace: namespace,
+			},
+			Spec: imagereflectorv1.ImagePolicySpec{
+				ImageRepositoryRef: meta.NamespacedObjectReference{},
+				Policy:             imagereflectorv1.ImagePolicyChoice{},
+			},
+		}
+
+		pipelineTrigger0 = pipelinev1alpha1.PipelineTrigger{
+			TypeMeta: v1.TypeMeta{
+				Kind:       "PipelineTrigger",
+				APIVersion: "pipeline.jquad.rocks/v1alpha1",
+			},
+			ObjectMeta: v1.ObjectMeta{
+				Name:      pipelineTriggerName0,
+				Namespace: namespace,
+			},
+			Spec: pipelinev1alpha1.PipelineTriggerSpec{
+				Source: pipelinev1alpha1.Source{
+					Kind: "GitRepository",
+					Name: gitRepositoryName,
+				},
+				PipelineRunSpec: tektondevv1.PipelineRunSpec{
+					PipelineRef: &tektondevv1.PipelineRef{
+						Name: "does-not-exist",
+					},
+					Params: []tektondevv1.Param{
+						{
+							Name: "test",
+							Value: tektondevv1.ArrayOrString{
+								Type:      tektondevv1.ParamTypeString,
+								StringVal: "test",
+							},
+						},
+					},
+				},
+			},
+		}
+
+		pipelineTrigger1 = pipelinev1alpha1.PipelineTrigger{
+			TypeMeta: v1.TypeMeta{
+				Kind:       "PipelineTrigger",
+				APIVersion: "pipeline.jquad.rocks/v1alpha1",
+			},
+			ObjectMeta: v1.ObjectMeta{
+				Name:      pipelineTriggerName1,
+				Namespace: namespace,
+			},
+			Spec: pipelinev1alpha1.PipelineTriggerSpec{
+				Source: pipelinev1alpha1.Source{
+					Kind: "GitRepository",
+					Name: gitRepositoryName,
+				},
+				PipelineRunSpec: tektondevv1.PipelineRunSpec{
+					PipelineRef: &tektondevv1.PipelineRef{
+						Name: pipelineName,
+					},
+					Params: []tektondevv1.Param{
+						{
+							Name: "test",
+							Value: tektondevv1.ArrayOrString{
+								Type:      tektondevv1.ParamTypeString,
+								StringVal: "test",
+							},
+						},
+					},
+				},
+			},
+		}
+
+		pipelineTrigger2 = pipelinev1alpha1.PipelineTrigger{
+			TypeMeta: v1.TypeMeta{
+				Kind:       "PipelineTrigger",
+				APIVersion: "pipeline.jquad.rocks/v1alpha1",
+			},
+			ObjectMeta: v1.ObjectMeta{
+				Name:      pipelineTriggerName2,
+				Namespace: namespace,
+			},
+			Spec: pipelinev1alpha1.PipelineTriggerSpec{
+				Source: pipelinev1alpha1.Source{
+					Kind: "ImagePolicy",
+					Name: imagePolicyName,
+				},
+				PipelineRunSpec: tektondevv1.PipelineRunSpec{
+					PipelineRef: &tektondevv1.PipelineRef{
+						Name: pipelineName,
+					},
+					Params: []tektondevv1.Param{
+						{
+							Name: "test",
+							Value: tektondevv1.ArrayOrString{
+								Type:      tektondevv1.ParamTypeString,
+								StringVal: "test",
+							},
+						},
+					},
+				},
+			},
+		}
+
+		pipelineTrigger3 = pipelinev1alpha1.PipelineTrigger{
+			TypeMeta: v1.TypeMeta{
+				Kind:       "PipelineTrigger",
+				APIVersion: "pipeline.jquad.rocks/v1alpha1",
+			},
+			ObjectMeta: v1.ObjectMeta{
+				Name:      pipelineTriggerName3,
+				Namespace: namespace,
+			},
+			Spec: pipelinev1alpha1.PipelineTriggerSpec{
+				Source: pipelinev1alpha1.Source{
+					Kind: "PullRequest",
+					Name: pullRequestName,
+				},
+				PipelineRunSpec: tektondevv1.PipelineRunSpec{
+					PipelineRef: &tektondevv1.PipelineRef{
+						Name: pipelineName,
+					},
+					Params: []tektondevv1.Param{
+						{
+							Name: "test",
+							Value: tektondevv1.ArrayOrString{
+								Type:      tektondevv1.ParamTypeString,
+								StringVal: "test",
+							},
+						},
+					},
+				},
+			},
+		}
+
+	})
+
+	Context("PipelineTrigger fails to create a PipelineRun to missing GitRepository", func() {
+		It("Should not be able to create a PipelineRun", func() {
+			By("Creating a Task custom resource")
+			ctx := context.Background()
 			Expect(k8sClient.Create(ctx, &taskMock)).Should(Succeed())
 
 			taskLookupKey := types.NamespacedName{Name: taskName, Namespace: namespace}
@@ -84,22 +260,6 @@ var _ = Describe("PipelineTrigger controller", func() {
 
 			By("Creating a Pipeline, referencing a single Task")
 
-			pipelineMock := tektondevv1.Pipeline{
-				ObjectMeta: v1.ObjectMeta{
-					Name:      pipelineName,
-					Namespace: namespace,
-				},
-				Spec: tektondevv1.PipelineSpec{
-					Tasks: []tektondevv1.PipelineTask{
-						{
-							Name: taskName,
-							TaskRef: &tektondevv1.TaskRef{
-								Name: taskName,
-							},
-						},
-					},
-				},
-			}
 			Expect(k8sClient.Create(ctx, &pipelineMock)).Should(Succeed())
 
 			pipelineLookupKey := types.NamespacedName{Name: pipelineName, Namespace: namespace}
@@ -112,36 +272,6 @@ var _ = Describe("PipelineTrigger controller", func() {
 
 			By("Creating a PipelineTrigger, referencing an existing Pipeline and not existing GitRepository")
 
-			pipelineTrigger1 := pipelinev1alpha1.PipelineTrigger{
-				TypeMeta: v1.TypeMeta{
-					Kind:       "PipelineTrigger",
-					APIVersion: "pipeline.jquad.rocks/v1alpha1",
-				},
-				ObjectMeta: v1.ObjectMeta{
-					Name:      pipelineTriggerName1,
-					Namespace: namespace,
-				},
-				Spec: pipelinev1alpha1.PipelineTriggerSpec{
-					Source: pipelinev1alpha1.Source{
-						Kind: "GitRepository",
-						Name: gitRepositoryName,
-					},
-					PipelineRunSpec: tektondevv1.PipelineRunSpec{
-						PipelineRef: &tektondevv1.PipelineRef{
-							Name: pipelineName,
-						},
-						Params: []tektondevv1.Param{
-							{
-								Name: "test",
-								Value: tektondevv1.ArrayOrString{
-									Type:      tektondevv1.ParamTypeString,
-									StringVal: "test",
-								},
-							},
-						},
-					},
-				},
-			}
 			Expect(k8sClient.Create(ctx, &pipelineTrigger1)).Should(Succeed())
 
 			pipelineTriggerLookupKey := types.NamespacedName{Name: pipelineTriggerName1, Namespace: namespace}
@@ -178,16 +308,6 @@ var _ = Describe("PipelineTrigger controller", func() {
 
 			By("Creating a GitRepository")
 			ctx := context.Background()
-			gitRepository := sourcev1.GitRepository{
-				ObjectMeta: v1.ObjectMeta{
-					Name:      gitRepositoryName,
-					Namespace: namespace,
-				},
-				Spec: sourcev1.GitRepositorySpec{
-					URL:      "http://github.com/org/repo.git",
-					Interval: v1.Duration{},
-				},
-			}
 			Expect(k8sClient.Create(ctx, &gitRepository)).Should(Succeed())
 
 			gitRepositoryLookupKey := types.NamespacedName{Name: gitRepositoryName, Namespace: namespace}
@@ -235,28 +355,7 @@ var _ = Describe("PipelineTrigger controller", func() {
 
 			By("Creating a PipelineTrigger, referencing an existing Pipeline and GitRepository")
 
-			pipelineTrigger := pipelinev1alpha1.PipelineTrigger{
-				TypeMeta: v1.TypeMeta{
-					Kind:       "PipelineTrigger",
-					APIVersion: "pipeline.jquad.rocks/v1alpha1",
-				},
-				ObjectMeta: v1.ObjectMeta{
-					Name:      pipelineTriggerName1,
-					Namespace: namespace,
-				},
-				Spec: pipelinev1alpha1.PipelineTriggerSpec{
-					Source: pipelinev1alpha1.Source{
-						Kind: "GitRepository",
-						Name: gitRepositoryName,
-					},
-					PipelineRunSpec: tektondevv1.PipelineRunSpec{
-						PipelineRef: &tektondevv1.PipelineRef{
-							Name: pipelineName,
-						},
-					},
-				},
-			}
-			Expect(k8sClient.Create(ctx, &pipelineTrigger)).Should(Succeed())
+			Expect(k8sClient.Create(ctx, &pipelineTrigger1)).Should(Succeed())
 
 			pipelineTriggerLookupKey := types.NamespacedName{Name: pipelineTriggerName1, Namespace: namespace}
 			createdPipelineTrigger := &pipelinev1alpha1.PipelineTrigger{}
@@ -281,6 +380,13 @@ var _ = Describe("PipelineTrigger controller", func() {
 			Eventually(func() (int, error) {
 				err := k8sClient.Get(context.Background(), pipelineTriggerLookupKey, createdPipelineTrigger)
 				return len(createdPipelineTrigger.Status.GitRepository.Conditions), err
+			}, timeout, interval).Should(Equal(1))
+
+			By("Checking if the PipelineTrigger controller has started a single pipeline")
+			pipelineRuns := &tektondevv1.PipelineRunList{}
+			Eventually(func() (int, error) {
+				err := k8sClient.List(context.Background(), pipelineRuns)
+				return len(pipelineRuns.Items), err
 			}, timeout, interval).Should(Equal(1))
 
 			By("Checking if the PipelineTrigger controller is managing the PipelineRun")
@@ -374,16 +480,7 @@ var _ = Describe("PipelineTrigger controller", func() {
 
 			By("Creating a GitRepository")
 			ctx := context.Background()
-			gitRepository := sourcev1.GitRepository{
-				ObjectMeta: v1.ObjectMeta{
-					Name:      gitRepositoryName,
-					Namespace: namespace,
-				},
-				Spec: sourcev1.GitRepositorySpec{
-					URL:      "http://github.com/org/repo.git",
-					Interval: v1.Duration{},
-				},
-			}
+
 			Expect(k8sClient.Create(ctx, &gitRepository)).Should(Succeed())
 
 			gitRepositoryLookupKey := types.NamespacedName{Name: gitRepositoryName, Namespace: namespace}
@@ -396,39 +493,9 @@ var _ = Describe("PipelineTrigger controller", func() {
 
 			By("Creating a PipelineTrigger, referencing a non-existing Pipeline and existing GitRepository")
 
-			pipelineTrigger1 := pipelinev1alpha1.PipelineTrigger{
-				TypeMeta: v1.TypeMeta{
-					Kind:       "PipelineTrigger",
-					APIVersion: "pipeline.jquad.rocks/v1alpha1",
-				},
-				ObjectMeta: v1.ObjectMeta{
-					Name:      pipelineTriggerName1,
-					Namespace: namespace,
-				},
-				Spec: pipelinev1alpha1.PipelineTriggerSpec{
-					Source: pipelinev1alpha1.Source{
-						Kind: "GitRepository",
-						Name: gitRepositoryName,
-					},
-					PipelineRunSpec: tektondevv1.PipelineRunSpec{
-						PipelineRef: &tektondevv1.PipelineRef{
-							Name: "does-not-exist",
-						},
-						Params: []tektondevv1.Param{
-							{
-								Name: "test",
-								Value: tektondevv1.ArrayOrString{
-									Type:      tektondevv1.ParamTypeString,
-									StringVal: "test",
-								},
-							},
-						},
-					},
-				},
-			}
-			Expect(k8sClient.Create(ctx, &pipelineTrigger1)).Should(Succeed())
+			Expect(k8sClient.Create(ctx, &pipelineTrigger0)).Should(Succeed())
 
-			pipelineTriggerLookupKey := types.NamespacedName{Name: pipelineTriggerName1, Namespace: namespace}
+			pipelineTriggerLookupKey := types.NamespacedName{Name: pipelineTriggerName0, Namespace: namespace}
 			createdPipelineTrigger := &pipelinev1alpha1.PipelineTrigger{}
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, pipelineTriggerLookupKey, createdPipelineTrigger)
@@ -460,37 +527,7 @@ var _ = Describe("PipelineTrigger controller", func() {
 		It("Should not be able to create a PipelineRun", func() {
 			By("Creating a PipelineTrigger, referencing an existing Pipeline and not existing GitRepository")
 
-			pipelineTrigger := pipelinev1alpha1.PipelineTrigger{
-				TypeMeta: v1.TypeMeta{
-					Kind:       "PipelineTrigger",
-					APIVersion: "pipeline.jquad.rocks/v1alpha1",
-				},
-				ObjectMeta: v1.ObjectMeta{
-					Name:      pipelineTriggerName2,
-					Namespace: namespace,
-				},
-				Spec: pipelinev1alpha1.PipelineTriggerSpec{
-					Source: pipelinev1alpha1.Source{
-						Kind: "ImagePolicy",
-						Name: imagePolicyName,
-					},
-					PipelineRunSpec: tektondevv1.PipelineRunSpec{
-						PipelineRef: &tektondevv1.PipelineRef{
-							Name: pipelineName,
-						},
-						Params: []tektondevv1.Param{
-							{
-								Name: "test",
-								Value: tektondevv1.ArrayOrString{
-									Type:      tektondevv1.ParamTypeString,
-									StringVal: "test",
-								},
-							},
-						},
-					},
-				},
-			}
-			Expect(k8sClient.Create(ctx, &pipelineTrigger)).Should(Succeed())
+			Expect(k8sClient.Create(ctx, &pipelineTrigger2)).Should(Succeed())
 
 			pipelineTriggerLookupKey := types.NamespacedName{Name: pipelineTriggerName2, Namespace: namespace}
 			createdPipelineTrigger := &pipelinev1alpha1.PipelineTrigger{}
@@ -527,16 +564,7 @@ var _ = Describe("PipelineTrigger controller", func() {
 
 			By("Creating a ImagePolicy")
 			ctx := context.Background()
-			imagePolicy := imagereflectorv1.ImagePolicy{
-				ObjectMeta: v1.ObjectMeta{
-					Name:      imagePolicyName,
-					Namespace: namespace,
-				},
-				Spec: imagereflectorv1.ImagePolicySpec{
-					ImageRepositoryRef: meta.NamespacedObjectReference{},
-					Policy:             imagereflectorv1.ImagePolicyChoice{},
-				},
-			}
+
 			Expect(k8sClient.Create(ctx, &imagePolicy)).Should(Succeed())
 
 			imagePolicyLookupKey := types.NamespacedName{Name: imagePolicyName, Namespace: namespace}
@@ -577,28 +605,7 @@ var _ = Describe("PipelineTrigger controller", func() {
 
 			By("Creating a PipelineTrigger, referencing an existing Pipeline and ImagePolicy")
 
-			pipelineTrigger := pipelinev1alpha1.PipelineTrigger{
-				TypeMeta: v1.TypeMeta{
-					Kind:       "PipelineTrigger",
-					APIVersion: "pipeline.jquad.rocks/v1alpha1",
-				},
-				ObjectMeta: v1.ObjectMeta{
-					Name:      pipelineTriggerName2,
-					Namespace: namespace,
-				},
-				Spec: pipelinev1alpha1.PipelineTriggerSpec{
-					Source: pipelinev1alpha1.Source{
-						Kind: "ImagePolicy",
-						Name: imagePolicyName,
-					},
-					PipelineRunSpec: tektondevv1.PipelineRunSpec{
-						PipelineRef: &tektondevv1.PipelineRef{
-							Name: pipelineName,
-						},
-					},
-				},
-			}
-			Expect(k8sClient.Create(ctx, &pipelineTrigger)).Should(Succeed())
+			Expect(k8sClient.Create(ctx, &pipelineTrigger2)).Should(Succeed())
 
 			pipelineTriggerLookupKey := types.NamespacedName{Name: pipelineTriggerName2, Namespace: namespace}
 			createdPipelineTrigger := &pipelinev1alpha1.PipelineTrigger{}
@@ -716,37 +723,7 @@ var _ = Describe("PipelineTrigger controller", func() {
 
 			By("Creating a PipelineTrigger, referencing an existing Pipeline and not existing PullRequest")
 
-			pipelineTrigger := pipelinev1alpha1.PipelineTrigger{
-				TypeMeta: v1.TypeMeta{
-					Kind:       "PipelineTrigger",
-					APIVersion: "pipeline.jquad.rocks/v1alpha1",
-				},
-				ObjectMeta: v1.ObjectMeta{
-					Name:      pipelineTriggerName3,
-					Namespace: namespace,
-				},
-				Spec: pipelinev1alpha1.PipelineTriggerSpec{
-					Source: pipelinev1alpha1.Source{
-						Kind: "PullRequest",
-						Name: pullRequestName,
-					},
-					PipelineRunSpec: tektondevv1.PipelineRunSpec{
-						PipelineRef: &tektondevv1.PipelineRef{
-							Name: pipelineName,
-						},
-						Params: []tektondevv1.Param{
-							{
-								Name: "test",
-								Value: tektondevv1.ArrayOrString{
-									Type:      tektondevv1.ParamTypeString,
-									StringVal: "test",
-								},
-							},
-						},
-					},
-				},
-			}
-			Expect(k8sClient.Create(ctx, &pipelineTrigger)).Should(Succeed())
+			Expect(k8sClient.Create(ctx, &pipelineTrigger3)).Should(Succeed())
 
 			pipelineTriggerLookupKey := types.NamespacedName{Name: pipelineTriggerName3, Namespace: namespace}
 			createdPipelineTrigger := &pipelinev1alpha1.PipelineTrigger{}
