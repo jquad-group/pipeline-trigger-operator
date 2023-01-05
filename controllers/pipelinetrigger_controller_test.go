@@ -17,12 +17,14 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	imagereflectorv1 "github.com/fluxcd/image-reflector-controller/api/v1beta1"
 	"github.com/fluxcd/pkg/apis/meta"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 	opstatus "github.com/jquad-group/pipeline-trigger-operator/pkg/status"
+	pullrequestv1alpha1 "github.com/jquad-group/pullrequest-operator/api/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	tektondevv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
@@ -40,6 +42,8 @@ var taskMock tektondevv1.Task
 var pipelineMock tektondevv1.Pipeline
 var gitRepository sourcev1.GitRepository
 var imagePolicy imagereflectorv1.ImagePolicy
+var pullRequest pullrequestv1alpha1.PullRequest
+var createdPipelineTrigger *pipelinev1alpha1.PipelineTrigger
 var pipelineTrigger0 pipelinev1alpha1.PipelineTrigger
 var pipelineTrigger1 pipelinev1alpha1.PipelineTrigger
 var pipelineTrigger2 pipelinev1alpha1.PipelineTrigger
@@ -65,6 +69,8 @@ var _ = Describe("PipelineTrigger controller", func() {
 	)
 
 	BeforeEach(func() {
+		ctx = context.Background()
+		createdPipelineTrigger = &pipelinev1alpha1.PipelineTrigger{}
 		taskMock = tektondevv1.Task{
 			ObjectMeta: v1.ObjectMeta{
 				Name:      taskName,
@@ -115,6 +121,28 @@ var _ = Describe("PipelineTrigger controller", func() {
 			Spec: imagereflectorv1.ImagePolicySpec{
 				ImageRepositoryRef: meta.NamespacedObjectReference{},
 				Policy:             imagereflectorv1.ImagePolicyChoice{},
+			},
+		}
+
+		pullRequest = pullrequestv1alpha1.PullRequest{
+			ObjectMeta: v1.ObjectMeta{
+				Name:      pullRequestName,
+				Namespace: namespace,
+			},
+			Spec: pullrequestv1alpha1.PullRequestSpec{
+				GitProvider: pullrequestv1alpha1.GitProvider{
+					Provider:           "Github",
+					InsecureSkipVerify: true,
+					Github: pullrequestv1alpha1.Github{
+						Url:        "https://github.com/example-org/microservice",
+						Owner:      "example-org",
+						Repository: "microservice",
+					},
+				},
+				TargetBranch: pullrequestv1alpha1.Branch{
+					Name: "main",
+				},
+				Interval: v1.Duration{},
 			},
 		}
 
@@ -245,60 +273,46 @@ var _ = Describe("PipelineTrigger controller", func() {
 	})
 
 	Context("PipelineTrigger fails to create a PipelineRun to missing GitRepository", func() {
-		It("Should not be able to create a PipelineRun", func() {
-			By("Creating a Task custom resource")
-			ctx := context.Background()
-			Expect(k8sClient.Create(ctx, &taskMock)).Should(Succeed())
 
+		It("Should not be able to create a PipelineRun", func() {
+
+			By("Creating a Task custom resource")
+			Expect(k8sClient.Create(ctx, &taskMock)).Should(Succeed())
 			taskLookupKey := types.NamespacedName{Name: taskName, Namespace: namespace}
 			createdTask := &tektondevv1.Task{}
-
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, taskLookupKey, createdTask)
 				return err == nil
 			}, timeout, interval).Should(BeTrue())
 
 			By("Creating a Pipeline, referencing a single Task")
-
 			Expect(k8sClient.Create(ctx, &pipelineMock)).Should(Succeed())
-
 			pipelineLookupKey := types.NamespacedName{Name: pipelineName, Namespace: namespace}
 			createdPipeline := &tektondevv1.Pipeline{}
-
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, pipelineLookupKey, createdPipeline)
 				return err == nil
 			}, timeout, interval).Should(BeTrue())
 
 			By("Creating a PipelineTrigger, referencing an existing Pipeline and not existing GitRepository")
-
 			Expect(k8sClient.Create(ctx, &pipelineTrigger1)).Should(Succeed())
-
 			pipelineTriggerLookupKey := types.NamespacedName{Name: pipelineTriggerName1, Namespace: namespace}
-			createdPipelineTrigger := &pipelinev1alpha1.PipelineTrigger{}
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, pipelineTriggerLookupKey, createdPipelineTrigger)
 				return err == nil
 			}, timeout, interval).Should(BeTrue())
 
 			By("The Status of the PipelineTrigger should be not found")
-
 			Eventually(func() string {
-
 				err := k8sClient.Get(ctx, pipelineTriggerLookupKey, createdPipelineTrigger)
-
 				if err != nil {
 					return ""
 				}
-
 				if len(createdPipelineTrigger.Status.GitRepository.Conditions) == 0 {
 					return ""
 				}
 				return createdPipelineTrigger.Status.GitRepository.Conditions[0].Message
 			}, timeout, interval).Should(ContainSubstring("not found"))
-
-			By("Delete the PipelineTrigger")
-			Expect(k8sClient.Delete(ctx, createdPipelineTrigger)).Should(Succeed())
 		})
 	})
 
@@ -307,19 +321,15 @@ var _ = Describe("PipelineTrigger controller", func() {
 		It("Should be able to create a PipelineRun custom resources", func() {
 
 			By("Creating a GitRepository")
-			ctx := context.Background()
 			Expect(k8sClient.Create(ctx, &gitRepository)).Should(Succeed())
-
 			gitRepositoryLookupKey := types.NamespacedName{Name: gitRepositoryName, Namespace: namespace}
 			createdGitRepo := &sourcev1.GitRepository{}
-
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, gitRepositoryLookupKey, createdGitRepo)
 				return err == nil
 			}, timeout, interval).Should(BeTrue())
 
 			By("Updating the GitRepository status")
-
 			gitRepoStatus := sourcev1.GitRepositoryStatus{
 				Artifact: &sourcev1.Artifact{
 					Checksum:       "cb0053b034ac7e74e2278b94b69db15871e9b3b40124adde8c585c1bdda48b25",
@@ -339,7 +349,6 @@ var _ = Describe("PipelineTrigger controller", func() {
 					},
 				},
 			}
-
 			k8sClient.Get(ctx, gitRepositoryLookupKey, createdGitRepo)
 			createdGitRepo.Status = gitRepoStatus
 			Expect(k8sClient.Status().Update(ctx, createdGitRepo)).Should(Succeed())
@@ -354,11 +363,8 @@ var _ = Describe("PipelineTrigger controller", func() {
 			}, duration, interval).Should(Equal("main/dc0fd09d0915f47cbda5f235a8a9c30b2d8baa69"))
 
 			By("Creating a PipelineTrigger, referencing an existing Pipeline and GitRepository")
-
 			Expect(k8sClient.Create(ctx, &pipelineTrigger1)).Should(Succeed())
-
 			pipelineTriggerLookupKey := types.NamespacedName{Name: pipelineTriggerName1, Namespace: namespace}
-			createdPipelineTrigger := &pipelinev1alpha1.PipelineTrigger{}
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, pipelineTriggerLookupKey, createdPipelineTrigger)
 				return err == nil
@@ -368,7 +374,7 @@ var _ = Describe("PipelineTrigger controller", func() {
 			pipelineTriggerList := &pipelinev1alpha1.PipelineTriggerList{}
 			Eventually(func() ([]pipelinev1alpha1.PipelineTrigger, error) {
 				err := k8sClient.List(
-					context.Background(),
+					ctx,
 					pipelineTriggerList,
 					client.InNamespace("default"),
 				)
@@ -376,24 +382,22 @@ var _ = Describe("PipelineTrigger controller", func() {
 			}, timeout, interval).ShouldNot(BeEmpty())
 
 			By("Checking if the PipelineTrigger controller has started a new tekton pipeline")
-
 			Eventually(func() (int, error) {
-				err := k8sClient.Get(context.Background(), pipelineTriggerLookupKey, createdPipelineTrigger)
+				err := k8sClient.Get(ctx, pipelineTriggerLookupKey, createdPipelineTrigger)
 				return len(createdPipelineTrigger.Status.GitRepository.Conditions), err
 			}, timeout, interval).Should(Equal(1))
 
 			By("Checking if the PipelineTrigger controller has started a single pipeline")
 			pipelineRuns := &tektondevv1.PipelineRunList{}
 			Eventually(func() (int, error) {
-				err := k8sClient.List(context.Background(), pipelineRuns)
+				err := k8sClient.List(ctx, pipelineRuns)
 				return len(pipelineRuns.Items), err
 			}, timeout, interval).Should(Equal(1))
 
 			By("Checking if the PipelineTrigger controller is managing the PipelineRun")
-
 			pipelineRunList := &tektondevv1.PipelineRunList{}
 			Eventually(func() string {
-				k8sClient.List(context.Background(), pipelineRunList)
+				k8sClient.List(ctx, pipelineRunList)
 				pipelineRun := pipelineRunList.Items[0]
 				return pipelineRun.GetOwnerReferences()[0].Name
 			}, timeout, interval).Should(Equal(pipelineTriggerName1))
@@ -403,18 +407,18 @@ var _ = Describe("PipelineTrigger controller", func() {
 			createdPipelineRun := &tektondevv1.PipelineRun{}
 			var now = time.Date(2022, time.January, 1, 0, 0, 0, 0, time.UTC)
 			var testClock = clock.NewFakePassiveClock(now)
-			k8sClient.Get(context.Background(), pipelineRunLookupKey, createdPipelineRun)
+			k8sClient.Get(ctx, pipelineRunLookupKey, createdPipelineRun)
 			createdPipelineRun.Status.InitializeConditions(testClock)
 			Expect(k8sClient.Status().Update(ctx, createdPipelineRun)).Should(Succeed())
 			// https://tekton.dev/docs/pipelines/pipelineruns/#pipelinerun-status
 			By("Checking if the PipelineRun status reason was updated to reason: Started (status: Unknown)")
 			Eventually(func() (string, error) {
-				err := k8sClient.Get(context.Background(), pipelineRunLookupKey, createdPipelineRun)
+				err := k8sClient.Get(ctx, pipelineRunLookupKey, createdPipelineRun)
 				return string(createdPipelineRun.Status.GetCondition(apis.ConditionSucceeded).Reason), err
 			}, timeout, interval).Should(Equal("Started"))
 
 			By("Updating the PipelineRun status to reason: Running (status: Unknown)")
-			k8sClient.Get(context.Background(), pipelineRunLookupKey, createdPipelineRun)
+			k8sClient.Get(ctx, pipelineRunLookupKey, createdPipelineRun)
 			createdPipelineRun.Status.SetCondition(&apis.Condition{
 				Type:    apis.ConditionSucceeded,
 				Status:  corev1.ConditionUnknown,
@@ -426,12 +430,12 @@ var _ = Describe("PipelineTrigger controller", func() {
 
 			By("Checking if the PipelineRun status was updated to reason: Running (status: Unknown)")
 			Eventually(func() (string, error) {
-				err := k8sClient.Get(context.Background(), pipelineRunLookupKey, createdPipelineRun)
+				err := k8sClient.Get(ctx, pipelineRunLookupKey, createdPipelineRun)
 				return string(createdPipelineRun.Status.GetCondition(apis.ConditionSucceeded).Reason), err
 			}, timeout, interval).Should(Equal("Running"))
 
 			By("Updating the PipelineRun status to reason: Succeeded (status: True)")
-			k8sClient.Get(context.Background(), pipelineRunLookupKey, createdPipelineRun)
+			k8sClient.Get(ctx, pipelineRunLookupKey, createdPipelineRun)
 			createdPipelineRun.Status.SetCondition(&apis.Condition{
 				Type:    apis.ConditionSucceeded,
 				Status:  corev1.ConditionTrue,
@@ -443,118 +447,93 @@ var _ = Describe("PipelineTrigger controller", func() {
 
 			By("Checking if the PipelineRun status was updated to reason: Succeeded (status: True)")
 			Eventually(func() (corev1.ConditionStatus, error) {
-				err := k8sClient.Get(context.Background(), pipelineRunLookupKey, createdPipelineRun)
+				err := k8sClient.Get(ctx, pipelineRunLookupKey, createdPipelineRun)
 				return createdPipelineRun.Status.GetCondition(apis.ConditionSucceeded).Status, err
 			}, timeout, interval).Should(Equal(corev1.ConditionTrue))
 
 			By("Checking if the PipelineTrigger LatestPipelineRun is correctly set")
 			Eventually(func() (string, error) {
-				err := k8sClient.Get(context.Background(), pipelineTriggerLookupKey, createdPipelineTrigger)
+				err := k8sClient.Get(ctx, pipelineTriggerLookupKey, createdPipelineTrigger)
 				return createdPipelineTrigger.Status.GitRepository.LatestPipelineRun, err
 			}, timeout, interval).Should(ContainSubstring("main"))
 
 			By("Checking if the PipelineTrigger status is updated to succeeded when the corresponding PipelineRun is completed")
 			Eventually(func() (string, error) {
-				err := k8sClient.Get(context.Background(), pipelineTriggerLookupKey, createdPipelineTrigger)
+				err := k8sClient.Get(ctx, pipelineTriggerLookupKey, createdPipelineTrigger)
 				cond, _ := createdPipelineTrigger.Status.GitRepository.GetCondition(opstatus.ReconcileSuccess)
 				return cond.Type, err
 			}, timeout, interval).Should(ContainSubstring(opstatus.ReconcileSuccess))
 
 			By("Checking if the PipelineTrigger status conditions = PipelineRuns status changes")
 			Eventually(func() (int, error) {
-				err := k8sClient.Get(context.Background(), pipelineTriggerLookupKey, createdPipelineTrigger)
+				err := k8sClient.Get(ctx, pipelineTriggerLookupKey, createdPipelineTrigger)
 				return len(createdPipelineTrigger.Status.GitRepository.Conditions), err
 			}, timeout, interval).Should(Equal(3))
 
-			By("Delete the PipelineTrigger, PipelineRun")
-			Expect(k8sClient.Delete(ctx, createdPipelineTrigger)).Should(Succeed())
+			By("Delete PipelineRun")
 			Expect(k8sClient.Delete(ctx, createdPipelineRun)).Should(Succeed())
 			Expect(k8sClient.Delete(ctx, createdGitRepo)).Should(Succeed())
-
 		})
-
 	})
 
 	Context("PipelineTrigger fails to create a PipelineRun due to missing Pipeline", func() {
+
 		It("Should not be able to create a PipelineRun", func() {
 
 			By("Creating a GitRepository")
-			ctx := context.Background()
-
 			Expect(k8sClient.Create(ctx, &gitRepository)).Should(Succeed())
-
 			gitRepositoryLookupKey := types.NamespacedName{Name: gitRepositoryName, Namespace: namespace}
 			createdGitRepo := &sourcev1.GitRepository{}
-
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, gitRepositoryLookupKey, createdGitRepo)
 				return err == nil
 			}, timeout, interval).Should(BeTrue())
 
 			By("Creating a PipelineTrigger, referencing a non-existing Pipeline and existing GitRepository")
-
 			Expect(k8sClient.Create(ctx, &pipelineTrigger0)).Should(Succeed())
-
 			pipelineTriggerLookupKey := types.NamespacedName{Name: pipelineTriggerName0, Namespace: namespace}
-			createdPipelineTrigger := &pipelinev1alpha1.PipelineTrigger{}
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, pipelineTriggerLookupKey, createdPipelineTrigger)
 				return err == nil
 			}, timeout, interval).Should(BeTrue())
 
 			By("The Status of the PipelineTrigger should be not found")
-
 			Eventually(func() string {
-
 				err := k8sClient.Get(ctx, pipelineTriggerLookupKey, createdPipelineTrigger)
-
 				if err != nil {
 					return ""
 				}
-
 				if len(createdPipelineTrigger.Status.GitRepository.Conditions) == 0 {
 					return ""
 				}
 				return createdPipelineTrigger.Status.GitRepository.Conditions[0].Message
 			}, timeout, interval).Should(ContainSubstring("not found"))
-
-			By("Delete the PipelineTrigger")
-			Expect(k8sClient.Delete(ctx, createdPipelineTrigger)).Should(Succeed())
 		})
 	})
 
 	Context("PipelineTrigger fails to create a PipelineRun to missing ImagePolicy", func() {
+
 		It("Should not be able to create a PipelineRun", func() {
+
 			By("Creating a PipelineTrigger, referencing an existing Pipeline and not existing GitRepository")
-
 			Expect(k8sClient.Create(ctx, &pipelineTrigger2)).Should(Succeed())
-
 			pipelineTriggerLookupKey := types.NamespacedName{Name: pipelineTriggerName2, Namespace: namespace}
-			createdPipelineTrigger := &pipelinev1alpha1.PipelineTrigger{}
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, pipelineTriggerLookupKey, createdPipelineTrigger)
 				return err == nil
 			}, timeout, interval).Should(BeTrue())
 
 			By("The Status of the PipelineTrigger should be not found")
-
 			Eventually(func() string {
-
 				err := k8sClient.Get(ctx, pipelineTriggerLookupKey, createdPipelineTrigger)
-
 				if err != nil {
 					return ""
 				}
-
 				if len(createdPipelineTrigger.Status.ImagePolicy.Conditions) == 0 {
 					return ""
 				}
 				return createdPipelineTrigger.Status.ImagePolicy.Conditions[0].Message
 			}, timeout, interval).Should(ContainSubstring("not found"))
-
-			By("Delete the PipelineTrigger")
-			Expect(k8sClient.Delete(ctx, createdPipelineTrigger)).Should(Succeed())
-
 		})
 	})
 
@@ -563,20 +542,15 @@ var _ = Describe("PipelineTrigger controller", func() {
 		It("Should be able to create a PipelineRun custom resources", func() {
 
 			By("Creating a ImagePolicy")
-			ctx := context.Background()
-
 			Expect(k8sClient.Create(ctx, &imagePolicy)).Should(Succeed())
-
 			imagePolicyLookupKey := types.NamespacedName{Name: imagePolicyName, Namespace: namespace}
 			createdImagePolicy := &imagereflectorv1.ImagePolicy{}
-
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, imagePolicyLookupKey, createdImagePolicy)
 				return err == nil
 			}, timeout, interval).Should(BeTrue())
 
 			By("Updating the ImagePolicy status")
-
 			imagePolicyStatus := imagereflectorv1.ImagePolicyStatus{
 				LatestImage: "ghcr.io/test/test:v0.0.1",
 				Conditions: []v1.Condition{
@@ -608,7 +582,7 @@ var _ = Describe("PipelineTrigger controller", func() {
 			Expect(k8sClient.Create(ctx, &pipelineTrigger2)).Should(Succeed())
 
 			pipelineTriggerLookupKey := types.NamespacedName{Name: pipelineTriggerName2, Namespace: namespace}
-			createdPipelineTrigger := &pipelinev1alpha1.PipelineTrigger{}
+
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, pipelineTriggerLookupKey, createdPipelineTrigger)
 				return err == nil
@@ -618,7 +592,7 @@ var _ = Describe("PipelineTrigger controller", func() {
 			pipelineTriggerList := &pipelinev1alpha1.PipelineTriggerList{}
 			Eventually(func() ([]pipelinev1alpha1.PipelineTrigger, error) {
 				err := k8sClient.List(
-					context.Background(),
+					ctx,
 					pipelineTriggerList,
 					client.InNamespace("default"),
 				)
@@ -628,7 +602,7 @@ var _ = Describe("PipelineTrigger controller", func() {
 			By("Checking if the PipelineTrigger controller has started a new tekton pipeline")
 
 			Eventually(func() (int, error) {
-				err := k8sClient.Get(context.Background(), pipelineTriggerLookupKey, createdPipelineTrigger)
+				err := k8sClient.Get(ctx, pipelineTriggerLookupKey, createdPipelineTrigger)
 				return len(createdPipelineTrigger.Status.ImagePolicy.Conditions), err
 			}, timeout, interval).Should(Equal(1))
 
@@ -636,7 +610,7 @@ var _ = Describe("PipelineTrigger controller", func() {
 
 			pipelineRunList := &tektondevv1.PipelineRunList{}
 			Eventually(func() string {
-				k8sClient.List(context.Background(), pipelineRunList)
+				k8sClient.List(ctx, pipelineRunList)
 				pipelineRun := pipelineRunList.Items[0]
 				return pipelineRun.GetOwnerReferences()[0].Name
 			}, timeout, interval).Should(Equal(pipelineTriggerName2))
@@ -646,18 +620,18 @@ var _ = Describe("PipelineTrigger controller", func() {
 			createdPipelineRun := &tektondevv1.PipelineRun{}
 			var now = time.Date(2022, time.January, 1, 0, 0, 0, 0, time.UTC)
 			var testClock = clock.NewFakePassiveClock(now)
-			k8sClient.Get(context.Background(), pipelineRunLookupKey, createdPipelineRun)
+			k8sClient.Get(ctx, pipelineRunLookupKey, createdPipelineRun)
 			createdPipelineRun.Status.InitializeConditions(testClock)
 			Expect(k8sClient.Status().Update(ctx, createdPipelineRun)).Should(Succeed())
 			// https://tekton.dev/docs/pipelines/pipelineruns/#pipelinerun-status
 			By("Checking if the PipelineRun status reason was updated to reason: Started (status: Unknown)")
 			Eventually(func() (string, error) {
-				err := k8sClient.Get(context.Background(), pipelineRunLookupKey, createdPipelineRun)
+				err := k8sClient.Get(ctx, pipelineRunLookupKey, createdPipelineRun)
 				return string(createdPipelineRun.Status.GetCondition(apis.ConditionSucceeded).Reason), err
 			}, timeout, interval).Should(Equal("Started"))
 
 			By("Updating the PipelineRun status to reason: Running (status: Unknown)")
-			k8sClient.Get(context.Background(), pipelineRunLookupKey, createdPipelineRun)
+			k8sClient.Get(ctx, pipelineRunLookupKey, createdPipelineRun)
 			createdPipelineRun.Status.SetCondition(&apis.Condition{
 				Type:    apis.ConditionSucceeded,
 				Status:  corev1.ConditionUnknown,
@@ -669,12 +643,12 @@ var _ = Describe("PipelineTrigger controller", func() {
 
 			By("Checking if the PipelineRun status was updated to reason: Running (status: Unknown)")
 			Eventually(func() (string, error) {
-				err := k8sClient.Get(context.Background(), pipelineRunLookupKey, createdPipelineRun)
+				err := k8sClient.Get(ctx, pipelineRunLookupKey, createdPipelineRun)
 				return string(createdPipelineRun.Status.GetCondition(apis.ConditionSucceeded).Reason), err
 			}, timeout, interval).Should(Equal("Running"))
 
 			By("Updating the PipelineRun status to reason: Succeeded (status: True)")
-			k8sClient.Get(context.Background(), pipelineRunLookupKey, createdPipelineRun)
+			k8sClient.Get(ctx, pipelineRunLookupKey, createdPipelineRun)
 			createdPipelineRun.Status.SetCondition(&apis.Condition{
 				Type:    apis.ConditionSucceeded,
 				Status:  corev1.ConditionTrue,
@@ -686,31 +660,30 @@ var _ = Describe("PipelineTrigger controller", func() {
 
 			By("Checking if the PipelineRun status was updated to reason: Succeeded (status: True)")
 			Eventually(func() (corev1.ConditionStatus, error) {
-				err := k8sClient.Get(context.Background(), pipelineRunLookupKey, createdPipelineRun)
+				err := k8sClient.Get(ctx, pipelineRunLookupKey, createdPipelineRun)
 				return createdPipelineRun.Status.GetCondition(apis.ConditionSucceeded).Status, err
 			}, timeout, interval).Should(Equal(corev1.ConditionTrue))
 
 			By("Checking if the PipelineTrigger LatestPipelineRun is correctly set")
 			Eventually(func() (string, error) {
-				err := k8sClient.Get(context.Background(), pipelineTriggerLookupKey, createdPipelineTrigger)
+				err := k8sClient.Get(ctx, pipelineTriggerLookupKey, createdPipelineTrigger)
 				return createdPipelineTrigger.Status.ImagePolicy.LatestPipelineRun, err
 			}, timeout, interval).Should(ContainSubstring("test"))
 
 			By("Checking if the PipelineTrigger status is updated to succeeded when the corresponding PipelineRun is completed")
 			Eventually(func() (string, error) {
-				err := k8sClient.Get(context.Background(), pipelineTriggerLookupKey, createdPipelineTrigger)
+				err := k8sClient.Get(ctx, pipelineTriggerLookupKey, createdPipelineTrigger)
 				cond, _ := createdPipelineTrigger.Status.ImagePolicy.GetCondition(opstatus.ReconcileSuccess)
 				return cond.Type, err
 			}, timeout, interval).Should(ContainSubstring(opstatus.ReconcileSuccess))
 
 			By("Checking if the PipelineTrigger status conditions = PipelineRuns status changes")
 			Eventually(func() (int, error) {
-				err := k8sClient.Get(context.Background(), pipelineTriggerLookupKey, createdPipelineTrigger)
+				err := k8sClient.Get(ctx, pipelineTriggerLookupKey, createdPipelineTrigger)
 				return len(createdPipelineTrigger.Status.ImagePolicy.Conditions), err
-			}, timeout, interval).Should(Equal(3))
+			}, timeout*10, interval).Should(Equal(3))
 
-			By("Delete the PipelineTrigger, PipelineRun, Pipeline, and Task")
-			Expect(k8sClient.Delete(ctx, createdPipelineTrigger)).Should(Succeed())
+			By("Delete PipelineRun, Pipeline, and Task")
 			Expect(k8sClient.Delete(ctx, createdPipelineRun)).Should(Succeed())
 			Expect(k8sClient.Delete(ctx, createdImagePolicy)).Should(Succeed())
 
@@ -726,7 +699,7 @@ var _ = Describe("PipelineTrigger controller", func() {
 			Expect(k8sClient.Create(ctx, &pipelineTrigger3)).Should(Succeed())
 
 			pipelineTriggerLookupKey := types.NamespacedName{Name: pipelineTriggerName3, Namespace: namespace}
-			createdPipelineTrigger := &pipelinev1alpha1.PipelineTrigger{}
+
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, pipelineTriggerLookupKey, createdPipelineTrigger)
 				return err == nil
@@ -748,289 +721,179 @@ var _ = Describe("PipelineTrigger controller", func() {
 				return createdPipelineTrigger.Status.Branches.Branches["null"].Conditions[0].Message
 			}, timeout, interval).Should(ContainSubstring("not found"))
 
-			By("Delete the PipelineTrigger")
-			Expect(k8sClient.Delete(ctx, createdPipelineTrigger)).Should(Succeed())
-
 		})
 	})
-	/*
-		Context("PipelineTrigger creates a PipelineRun on the test cluster for PullRequest", func() {
 
-			It("Should be able to create a PipelineRun custom resources", func() {
+	Context("PipelineTrigger creates a PipelineRun on the test cluster for PullRequest", func() {
 
-				By("Creating a PullRequest")
-				ctx := context.Background()
-				pullRequest := pullrequestv1alpha1.PullRequest{
-					ObjectMeta: v1.ObjectMeta{
-						Name:      pullRequestName,
-						Namespace: namespace,
-					},
-					Spec: pullrequestv1alpha1.PullRequestSpec{
-						GitProvider: pullrequestv1alpha1.GitProvider{
-							Provider:           "Github",
-							InsecureSkipVerify: true,
-							Github: pullrequestv1alpha1.Github{
-								Url:        "https://github.com/example-org/microservice",
-								Owner:      "example-org",
-								Repository: "microservice",
-							},
-						},
-						TargetBranch: pullrequestv1alpha1.Branch{
-							Name: "main",
-						},
-						Interval: v1.Duration{},
-					},
-				}
-				Expect(k8sClient.Create(ctx, &pullRequest)).Should(Succeed())
+		It("Should be able to create a PipelineRun custom resources", func() {
 
-				pullRequestLookupKey := types.NamespacedName{Name: pullRequestName, Namespace: namespace}
-				createdPullRequest := &pullrequestv1alpha1.PullRequest{}
+			By("Creating a PullRequest")
+			Expect(k8sClient.Create(ctx, &pullRequest)).Should(Succeed())
 
-				Eventually(func() bool {
-					err := k8sClient.Get(ctx, pullRequestLookupKey, createdPullRequest)
-					return err == nil
-				}, timeout, interval).Should(BeTrue())
+			pullRequestLookupKey := types.NamespacedName{Name: pullRequestName, Namespace: namespace}
+			createdPullRequest := &pullrequestv1alpha1.PullRequest{}
 
-				By("Updating the PullRequest status")
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, pullRequestLookupKey, createdPullRequest)
+				return err == nil
+			}, timeout, interval).Should(BeTrue())
 
-				pullRequestStatus := pullrequestv1alpha1.PullRequestStatus{
-					SourceBranches: pullrequestv1alpha1.Branches{
-						Branches: []pullrequestv1alpha1.Branch{
-							{
-								Name:    "feature-branch-test",
-								Commit:  "8932484a2017a3784608c2db429553a94f1e2f4b",
-								Details: "{\"id\":1163006807}",
-							},
-						},
-					},
-					Conditions: []v1.Condition{
+			By("Updating the PullRequest status")
+
+			pullRequestStatus := pullrequestv1alpha1.PullRequestStatus{
+				SourceBranches: pullrequestv1alpha1.Branches{
+					Branches: []pullrequestv1alpha1.Branch{
 						{
-							Type:               "Success",
-							Status:             v1.ConditionTrue,
-							Reason:             "Succeded",
-							Message:            "Success",
-							LastTransitionTime: v1.Now(),
+							Name:    "feature-branch-test",
+							Commit:  "8932484a2017a3784608c2db429553a94f1e2f4b",
+							Details: "{\"id\":1163006807}",
 						},
 					},
+				},
+				Conditions: []v1.Condition{
+					{
+						Type:               "Success",
+						Status:             v1.ConditionTrue,
+						Reason:             "Succeded",
+						Message:            "Success",
+						LastTransitionTime: v1.Now(),
+					},
+				},
+			}
+
+			k8sClient.Get(ctx, pullRequestLookupKey, createdPullRequest)
+			createdPullRequest.Status = pullRequestStatus
+			Expect(k8sClient.Status().Update(ctx, createdPullRequest)).Should(Succeed())
+
+			By("Checking if the PullRequest artifact revision was updated")
+			Eventually(func() (string, error) {
+				err := k8sClient.Get(ctx, pullRequestLookupKey, createdPullRequest)
+				if err != nil {
+					return "", err
 				}
+				return createdPullRequest.Status.SourceBranches.Branches[0].Name, nil
+			}, duration, interval).Should(Equal("feature-branch-test"))
 
-				k8sClient.Get(ctx, pullRequestLookupKey, createdPullRequest)
-				createdPullRequest.Status = pullRequestStatus
-				Expect(k8sClient.Status().Update(ctx, createdPullRequest)).Should(Succeed())
+			By("Creating a PipelineTrigger, referencing an existing Pipeline and PullRequest")
 
-				By("Checking if the PullRequest artifact revision was updated")
-				Eventually(func() (string, error) {
-					err := k8sClient.Get(ctx, pullRequestLookupKey, createdPullRequest)
-					if err != nil {
-						return "", err
-					}
-					return createdPullRequest.Status.SourceBranches.Branches[0].Name, nil
-				}, duration, interval).Should(Equal("feature-branch-test"))
+			Expect(k8sClient.Create(ctx, &pipelineTrigger3)).Should(Succeed())
 
-				By("Creating a Tekton Task")
+			pipelineTriggerLookupKey := types.NamespacedName{Name: pipelineTriggerName3, Namespace: namespace}
 
-				taskMock := tektondevv1.Task{
-					ObjectMeta: v1.ObjectMeta{
-						Name:      taskName,
-						Namespace: namespace,
-					},
-					Spec: tektondevv1.TaskSpec{
-						Params: []tektondevv1.ParamSpec{
-							{
-								Name: taskName,
-							},
-						},
-					},
-				}
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, pipelineTriggerLookupKey, createdPipelineTrigger)
+				return err == nil
+			}, timeout, interval).Should(BeTrue())
 
-				Expect(k8sClient.Create(ctx, &taskMock)).Should(Succeed())
+			By("Checking if the PipelineTrigger was eventually created")
+			pipelineTriggerList := &pipelinev1alpha1.PipelineTriggerList{}
+			Eventually(func() (int, error) {
+				err := k8sClient.List(
+					ctx,
+					pipelineTriggerList,
+					client.InNamespace("default"),
+				)
+				return len(pipelineTriggerList.Items), err
+			}, timeout, interval).Should(Equal(1))
 
-				taskLookupKey := types.NamespacedName{Name: taskName, Namespace: namespace}
-				createdTask := &tektondevv1.Task{}
+			By("Checking if the PipelineTrigger controller has started a new tekton pipeline")
 
-				Eventually(func() bool {
-					err := k8sClient.Get(ctx, taskLookupKey, createdTask)
-					return err == nil
-				}, timeout, interval).Should(BeTrue())
+			Eventually(func() (int, error) {
+				err := k8sClient.Get(ctx, pipelineTriggerLookupKey, createdPipelineTrigger)
+				return len(createdPipelineTrigger.Status.Branches.Branches["feature-branch-test"].Conditions), err
+			}, timeout, interval).Should(Equal(1))
 
-				By("Creating a Tekton Pipeline, referencing a single Task")
+			By("Checking if the PipelineTrigger controller is managing the PipelineRun")
 
-				pipelineMock := tektondevv1.Pipeline{
-					ObjectMeta: v1.ObjectMeta{
-						Name:      pipelineName,
-						Namespace: namespace,
-					},
-					Spec: tektondevv1.PipelineSpec{
-						Tasks: []tektondevv1.PipelineTask{
-							{
-								Name: taskName,
-								TaskRef: &tektondevv1.TaskRef{
-									Name: taskName,
-								},
-							},
-						},
-					},
-				}
-				Expect(k8sClient.Create(ctx, &pipelineMock)).Should(Succeed())
+			pipelineRunList := &tektondevv1.PipelineRunList{}
+			Eventually(func() string {
+				k8sClient.List(ctx, pipelineRunList)
+				pipelineRun := pipelineRunList.Items[0]
+				return pipelineRun.GetOwnerReferences()[0].Name
+			}, timeout, interval).Should(Equal(pipelineTriggerName3))
 
-				pipelineLookupKey := types.NamespacedName{Name: pipelineName, Namespace: namespace}
-				createdPipeline := &tektondevv1.Pipeline{}
+			By("Adding the tekton.dev label to the PipelineRun")
+			pipelineRunLookupKey := types.NamespacedName{Name: pipelineRunList.Items[0].Name, Namespace: namespace}
+			createdPipelineRun := &tektondevv1.PipelineRun{}
+			k8sClient.Get(ctx, pipelineRunLookupKey, createdPipelineRun)
+			createdPipelineRun.SetLabels(map[string]string{
+				"pipeline.jquad.rocks/pr.branch.commit": "8932484a2017a3784608c2db429553a94f1e2f4b",
+				"pipeline.jquad.rocks/pr.branch.name":   "feature-branch-test",
+				"tekton.dev/pipeline":                   pipelineName})
+			Expect(k8sClient.Update(ctx, createdPipelineRun)).Should(Succeed())
+			By("Updating the PipelineRun status to reason started (status: Unknown)")
+			var now = time.Date(2022, time.January, 1, 0, 0, 0, 0, time.UTC)
+			var testClock = clock.NewFakePassiveClock(now)
+			k8sClient.Get(ctx, pipelineRunLookupKey, createdPipelineRun)
+			createdPipelineRun.Status.InitializeConditions(testClock)
+			Expect(k8sClient.Status().Update(ctx, createdPipelineRun)).Should(Succeed())
+			// https://tekton.dev/docs/pipelines/pipelineruns/#pipelinerun-status
+			By("Checking if the PipelineRun status reason was updated to reason: Started (status: Unknown)")
+			Eventually(func() (string, error) {
+				err := k8sClient.Get(ctx, pipelineRunLookupKey, createdPipelineRun)
+				return string(createdPipelineRun.Status.GetCondition(apis.ConditionSucceeded).Reason), err
+			}, timeout, interval).Should(Equal("Started"))
 
-				Eventually(func() bool {
-					err := k8sClient.Get(ctx, pipelineLookupKey, createdPipeline)
-					return err == nil
-				}, timeout, interval).Should(BeTrue())
-
-				By("Creating a PipelineTrigger, referencing an existing Pipeline and PullRequest")
-
-				pipelineTrigger := pipelinev1alpha1.PipelineTrigger{
-					TypeMeta: v1.TypeMeta{
-						Kind:       "PipelineTrigger",
-						APIVersion: "pipeline.jquad.rocks/v1alpha1",
-					},
-					ObjectMeta: v1.ObjectMeta{
-						Name:      pipelineTriggerName,
-						Namespace: namespace,
-					},
-					Spec: pipelinev1alpha1.PipelineTriggerSpec{
-						Source: pipelinev1alpha1.Source{
-							Kind: "PullRequest",
-							Name: pullRequestName,
-						},
-						PipelineRunSpec: tektondevv1.PipelineRunSpec{
-							PipelineRef: &tektondevv1.PipelineRef{
-								Name: pipelineName,
-							},
-						},
-					},
-				}
-				Expect(k8sClient.Create(ctx, &pipelineTrigger)).Should(Succeed())
-
-				pipelineTriggerLookupKey := types.NamespacedName{Name: pipelineTriggerName, Namespace: namespace}
-				createdPipelineTrigger := &pipelinev1alpha1.PipelineTrigger{}
-				Eventually(func() bool {
-					err := k8sClient.Get(ctx, pipelineTriggerLookupKey, createdPipelineTrigger)
-					return err == nil
-				}, timeout, interval).Should(BeTrue())
-
-				By("Checking if the PipelineTrigger was eventually created")
-				pipelineTriggerList := &pipelinev1alpha1.PipelineTriggerList{}
-				Eventually(func() ([]pipelinev1alpha1.PipelineTrigger, error) {
-					err := k8sClient.List(
-						context.Background(),
-						pipelineTriggerList,
-						client.InNamespace("default"),
-					)
-					return pipelineTriggerList.Items, err
-				}, timeout, interval).ShouldNot(BeEmpty())
-
-				By("Checking if the PipelineTrigger controller has started a new tekton pipeline")
-
-				Eventually(func() (int, error) {
-					err := k8sClient.Get(context.Background(), pipelineTriggerLookupKey, createdPipelineTrigger)
-					return len(createdPipelineTrigger.Status.Branches.Branches["feature-branch-test"].Conditions), err
-				}, timeout, interval).Should(Equal(1))
-
-				By("Checking if the PipelineTrigger controller is managing the PipelineRun")
-
-				pipelineRunList := &tektondevv1.PipelineRunList{}
-				Eventually(func() string {
-					k8sClient.List(context.Background(), pipelineRunList)
-					pipelineRun := pipelineRunList.Items[0]
-					return pipelineRun.GetOwnerReferences()[0].Name
-				}, timeout, interval).Should(Equal(pipelineTriggerName))
-
-				By("Updating the PipelineRun status to reason started (status: Unknown)")
-				pipelineRunLookupKey := types.NamespacedName{Name: pipelineRunList.Items[0].Name, Namespace: namespace}
-				createdPipelineRun := &tektondevv1.PipelineRun{}
-				var now = time.Date(2022, time.January, 1, 0, 0, 0, 0, time.UTC)
-				var testClock = clock.NewFakePassiveClock(now)
-				k8sClient.Get(context.Background(), pipelineRunLookupKey, createdPipelineRun)
-				createdPipelineRun.Status.InitializeConditions(testClock)
-				Expect(k8sClient.Status().Update(ctx, createdPipelineRun)).Should(Succeed())
-				// https://tekton.dev/docs/pipelines/pipelineruns/#pipelinerun-status
-				By("Checking if the PipelineRun status reason was updated to reason: Started (status: Unknown)")
-				Eventually(func() (string, error) {
-					err := k8sClient.Get(context.Background(), pipelineRunLookupKey, createdPipelineRun)
-					return string(createdPipelineRun.Status.GetCondition(apis.ConditionSucceeded).Reason), err
-				}, timeout, interval).Should(Equal("Started"))
-
-				By("Updating the PipelineRun status to reason: Running (status: Unknown)")
-				k8sClient.Get(context.Background(), pipelineRunLookupKey, createdPipelineRun)
-				createdPipelineRun.Status.SetCondition(&apis.Condition{
-					Type:    apis.ConditionSucceeded,
-					Status:  corev1.ConditionUnknown,
-					Reason:  "Running",
-					Message: "Tasks Running: 1 (Failed: 0, Cancelled 0), Skipped: 0",
-				})
-				createdPipelineRun.Status.ObservedGeneration = 2
-				Expect(k8sClient.Status().Update(ctx, createdPipelineRun)).Should(Succeed())
-
-				By("Checking if the PipelineRun status was updated to reason: Running (status: Unknown)")
-				Eventually(func() (string, error) {
-					err := k8sClient.Get(context.Background(), pipelineRunLookupKey, createdPipelineRun)
-					return string(createdPipelineRun.Status.GetCondition(apis.ConditionSucceeded).Reason), err
-				}, timeout, interval).Should(Equal("Running"))
-
-				By("Updating the PipelineRun status to reason: Succeeded (status: True)")
-				k8sClient.Get(context.Background(), pipelineRunLookupKey, createdPipelineRun)
-				createdPipelineRun.Status.SetCondition(&apis.Condition{
-					Type:    apis.ConditionSucceeded,
-					Status:  corev1.ConditionTrue,
-					Reason:  "Succeeded",
-					Message: "Tasks Completed: 1 (Failed: 0, Cancelled 0), Skipped: 0",
-				})
-				createdPipelineRun.Status.ObservedGeneration = 2
-				Expect(k8sClient.Status().Update(ctx, createdPipelineRun)).Should(Succeed())
-
-				By("Checking if the PipelineRun status was updated to reason: Succeeded (status: True)")
-				Eventually(func() (corev1.ConditionStatus, error) {
-					err := k8sClient.Get(context.Background(), pipelineRunLookupKey, createdPipelineRun)
-					return createdPipelineRun.Status.GetCondition(apis.ConditionSucceeded).Status, err
-				}, timeout, interval).Should(Equal(corev1.ConditionTrue))
-
-					By("Checking if the PipelineTrigger LatestPipelineRun is correctly set")
-					Eventually(func() (string, error) {
-						err := k8sClient.Get(context.Background(), pipelineTriggerLookupKey, createdPipelineTrigger)
-						fmt.Println(createdPipelineTrigger.Status.Branches.Branches["feature-branch-test"].Commit)
-						fmt.Println(createdPipelineTrigger.Status.Branches.Branches["feature-branch-test"].Name)
-						fmt.Println(createdPipelineTrigger.Status.Branches.Branches["feature-branch-test"].LatestPipelineRun)
-						return createdPipelineTrigger.Status.Branches.Branches["feature-branch-test"].LatestPipelineRun, err
-					}, timeout, interval).Should(ContainSubstring("feature-branch-test"))
-
-
-
-					By("Checking if the PipelineTrigger status is updated to succeeded when the corresponding PipelineRun is completed")
-					Eventually(func() (string, error) {
-						err := k8sClient.Get(context.Background(), pipelineTriggerLookupKey, createdPipelineTrigger)
-						cond, _ := createdPipelineTrigger.Status.Branches.Branches["feature-branch-test"].Conditions[0](opstatus.ReconcileSuccess)
-						return cond.Type, err
-					}, timeout, interval).Should(ContainSubstring(opstatus.ReconcileSuccess))
-
-
-				By("Checking if the PipelineTrigger status conditions = PipelineRuns status changes")
-				Eventually(func() (int, error) {
-					err := k8sClient.Get(context.Background(), pipelineTriggerLookupKey, createdPipelineTrigger)
-					return len(createdPipelineTrigger.Status.Branches.Branches["feature-branch-test"].Conditions), err
-				}, timeout, interval).Should(Equal(3))
-
-				By("Delete the PipelineTrigger, PipelineRun, Pipeline, and Task")
-				Expect(k8sClient.Delete(ctx, createdPipelineTrigger)).Should(Succeed())
-				Expect(k8sClient.Delete(ctx, createdPipelineRun)).Should(Succeed())
-				Expect(k8sClient.Delete(ctx, createdPipeline)).Should(Succeed())
-				Expect(k8sClient.Delete(ctx, createdTask)).Should(Succeed())
-				taskList := &tektondevv1.TaskList{}
-				Eventually(func() (int, error) {
-					err := k8sClient.List(context.Background(),
-						taskList,
-						client.InNamespace("default"),
-					)
-					return len(taskList.Items), err
-				}, timeout, interval).Should(Equal(0))
-				Expect(k8sClient.Delete(ctx, createdPullRequest)).Should(Succeed())
-
+			By("Updating the PipelineRun status to reason: Running (status: Unknown)")
+			k8sClient.Get(ctx, pipelineRunLookupKey, createdPipelineRun)
+			createdPipelineRun.Status.SetCondition(&apis.Condition{
+				Type:    apis.ConditionSucceeded,
+				Status:  corev1.ConditionUnknown,
+				Reason:  "Running",
+				Message: "Tasks Running: 1 (Failed: 0, Cancelled 0), Skipped: 0",
 			})
+			createdPipelineRun.Status.ObservedGeneration = 2
+			Expect(k8sClient.Status().Update(ctx, createdPipelineRun)).Should(Succeed())
+
+			By("Checking if the PipelineRun status was updated to reason: Running (status: Unknown)")
+			Eventually(func() (string, error) {
+				err := k8sClient.Get(ctx, pipelineRunLookupKey, createdPipelineRun)
+				return string(createdPipelineRun.Status.GetCondition(apis.ConditionSucceeded).Reason), err
+			}, timeout, interval).Should(Equal("Running"))
+
+			By("Updating the PipelineRun status to reason: Succeeded (status: True)")
+			k8sClient.Get(ctx, pipelineRunLookupKey, createdPipelineRun)
+			createdPipelineRun.Status.SetCondition(&apis.Condition{
+				Type:    apis.ConditionSucceeded,
+				Status:  corev1.ConditionTrue,
+				Reason:  "Succeeded",
+				Message: "Tasks Completed: 1 (Failed: 0, Cancelled 0), Skipped: 0",
+			})
+			createdPipelineRun.Status.ObservedGeneration = 2
+			Expect(k8sClient.Status().Update(ctx, createdPipelineRun)).Should(Succeed())
+
+			By("Checking if the PipelineRun status was updated to reason: Succeeded (status: True)")
+			Eventually(func() (corev1.ConditionStatus, error) {
+				err := k8sClient.Get(ctx, pipelineRunLookupKey, createdPipelineRun)
+				return createdPipelineRun.Status.GetCondition(apis.ConditionSucceeded).Status, err
+			}, timeout, interval).Should(Equal(corev1.ConditionTrue))
+
+			By("Checking if the PipelineTrigger LatestPipelineRun is correctly set")
+			Eventually(func() (string, error) {
+				err := k8sClient.Get(ctx, pipelineTriggerLookupKey, createdPipelineTrigger)
+				return createdPipelineTrigger.Status.Branches.Branches["feature-branch-test"].LatestPipelineRun, err
+			}, timeout, interval).Should(ContainSubstring("feature-branch-test"))
+
+			By("Checking if the PipelineTrigger status conditions = PipelineRuns status changes")
+			Eventually(func() (int, error) {
+				err := k8sClient.Get(ctx, pipelineTriggerLookupKey, createdPipelineTrigger)
+				return len(createdPipelineTrigger.Status.Branches.Branches["feature-branch-test"].Conditions), err
+			}, timeout, interval).Should(Equal(3))
+
+			By("Delete PipelineRun, and PullRequest")
+			Expect(k8sClient.Delete(ctx, createdPipelineRun)).Should(Succeed())
+			Expect(k8sClient.Delete(ctx, createdPullRequest)).Should(Succeed())
 
 		})
-	*/
+
+	})
+
+	AfterEach(func() {
+		err := k8sClient.Delete(ctx, createdPipelineTrigger)
+		if err != nil {
+			fmt.Println(err, "failed to delete object", "name")
+		}
+	})
+
 })

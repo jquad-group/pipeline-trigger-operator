@@ -218,6 +218,7 @@ func (pullrequestSubscriber *PullrequestSubscriber) SetCurrentPipelineRunStatus(
 		for key := range pipelineTrigger.Status.Branches.Branches {
 			tempBranch := pipelineTrigger.Status.Branches.Branches[key]
 			tempBranchLabels := tempBranch.GenerateBranchLabelsAsHash()
+			// This label is automatically added by the Tekton Controller
 			tempBranchLabels["tekton.dev/pipeline"] = pipelineTrigger.Spec.PipelineRunSpec.PipelineRef.Name
 			for i := range pipelineRunList.Items {
 				if pullrequestSubscriber.HasIntersection(tempBranchLabels, pipelineRunList.Items[i].GetLabels()) {
