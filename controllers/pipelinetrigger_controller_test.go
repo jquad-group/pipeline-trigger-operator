@@ -44,6 +44,7 @@ var gitRepository sourcev1.GitRepository
 var imagePolicy imagereflectorv1.ImagePolicy
 var pullRequest pullrequestv1alpha1.PullRequest
 var createdPipelineTrigger *pipelinev1alpha1.PipelineTrigger
+var pipelineTriggerList *pipelinev1alpha1.PipelineTriggerList
 var pipelineTrigger0 pipelinev1alpha1.PipelineTrigger
 var pipelineTrigger1 pipelinev1alpha1.PipelineTrigger
 var pipelineTrigger2 pipelinev1alpha1.PipelineTrigger
@@ -71,6 +72,7 @@ var _ = Describe("PipelineTrigger controller", func() {
 	BeforeEach(func() {
 		ctx = context.Background()
 		createdPipelineTrigger = &pipelinev1alpha1.PipelineTrigger{}
+		pipelineTriggerList = &pipelinev1alpha1.PipelineTriggerList{}
 		taskMock = tektondevv1.Task{
 			ObjectMeta: v1.ObjectMeta{
 				Name:      taskName,
@@ -272,11 +274,11 @@ var _ = Describe("PipelineTrigger controller", func() {
 
 	})
 
-	Context("PipelineTrigger fails to create a PipelineRun to missing GitRepository", func() {
+	Context("PipelineTrigger fails to create a PipelineRun due to missing GitRepository", func() {
 
 		It("Should not be able to create a PipelineRun", func() {
 
-			By("Creating a Task custom resource")
+			By("Creating a Task")
 			Expect(k8sClient.Create(ctx, &taskMock)).Should(Succeed())
 			taskLookupKey := types.NamespacedName{Name: taskName, Namespace: namespace}
 			createdTask := &tektondevv1.Task{}
@@ -371,7 +373,6 @@ var _ = Describe("PipelineTrigger controller", func() {
 			}, timeout, interval).Should(BeTrue())
 
 			By("Checking if the PipelineTrigger was eventually created")
-			pipelineTriggerList := &pipelinev1alpha1.PipelineTriggerList{}
 			Eventually(func() ([]pipelinev1alpha1.PipelineTrigger, error) {
 				err := k8sClient.List(
 					ctx,
@@ -589,7 +590,6 @@ var _ = Describe("PipelineTrigger controller", func() {
 			}, timeout, interval).Should(BeTrue())
 
 			By("Checking if the PipelineTrigger was eventually created")
-			pipelineTriggerList := &pipelinev1alpha1.PipelineTriggerList{}
 			Eventually(func() ([]pipelinev1alpha1.PipelineTrigger, error) {
 				err := k8sClient.List(
 					ctx,
@@ -787,7 +787,6 @@ var _ = Describe("PipelineTrigger controller", func() {
 			}, timeout, interval).Should(BeTrue())
 
 			By("Checking if the PipelineTrigger was eventually created")
-			pipelineTriggerList := &pipelinev1alpha1.PipelineTriggerList{}
 			Eventually(func() (int, error) {
 				err := k8sClient.List(
 					ctx,
@@ -894,6 +893,16 @@ var _ = Describe("PipelineTrigger controller", func() {
 		if err != nil {
 			fmt.Println(err, "failed to delete object", "name")
 		}
+		Eventually(func() bool {
+			err := k8sClient.List(ctx, pipelineTriggerList)
+			if err != nil {
+				return false
+			}
+			if len(pipelineTriggerList.Items) > 0 {
+				return false
+			}
+			return true
+		}, timeout*10, interval).Should(BeTrue())
 	})
 
 })
