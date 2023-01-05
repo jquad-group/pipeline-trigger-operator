@@ -103,7 +103,7 @@ vet: ## Run go vet against code.
 
 .PHONY: test
 test: manifests generate fmt vet envtest ## Run tests.	
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) --arch=amd64 use $(ENVTEST_K8S_VERSION) -p path)" go test ./... -coverprofile cover.out
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) --arch=amd64 use $(ENVTEST_K8S_VERSION) -p path)" go test ./... -test.v -ginkgo.v -ginkgo.show-node-events -coverprofile cover.out
 
 .PHONY: test-e2e # You will need to have a Kind cluster up in running to run this target
 test-e2e:

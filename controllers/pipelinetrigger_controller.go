@@ -144,20 +144,27 @@ func (r *PipelineTriggerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		prs := sourceSubscriber.CreatePipelineRunResource(&pipelineTrigger, r.Scheme)
 		// Start the PipelineRun resources
 		for pipelineRunCnt := 0; pipelineRunCnt < len(prs); pipelineRunCnt++ {
-			instanceName, _ := pipelineTrigger.StartPipelineRun(prs[pipelineRunCnt], ctx, req)
+			instanceName, _ := pipelineTrigger.StartPipelineRun(prs[pipelineRunCnt], ctx, req, r.Client)
 			newVersionMsg := "Started the pipeline " + instanceName + " in namespace " + pipelineTrigger.Namespace
 			r.recorder.Event(&pipelineTrigger, core.EventTypeNormal, "Info", newVersionMsg)
 		}
 
 		patch.UnstructuredContent()["status"] = pipelineTrigger.Status
-		r.Status().Patch(ctx, patch, client.Apply, patchOptions)
+		errStatus := r.Status().Patch(ctx, patch, client.Apply, patchOptions)
+		if errStatus != nil {
+			r.recorder.Event(&pipelineTrigger, core.EventTypeWarning, "Warning", errStatus.Error())
+		}
 
 	}
 
 	sourceSubscriber.SetCurrentPipelineRunStatus(pipelineRunList, &pipelineTrigger)
 
 	patch.UnstructuredContent()["status"] = pipelineTrigger.Status
-	r.Status().Patch(ctx, patch, client.Apply, patchOptions)
+	patch.SetManagedFields(nil)
+	errStatus := r.Status().Patch(ctx, patch, client.Apply, patchOptions)
+	if errStatus != nil {
+		r.recorder.Event(&pipelineTrigger, core.EventTypeWarning, "Warning", errStatus.Error())
+	}
 
 	return ctrl.Result{}, nil
 
