@@ -225,7 +225,7 @@ func (r *PipelineTriggerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		if owner == nil {
 			return nil
 		}
-		// ...make sure it's a CronJob...
+		// ...make sure it's a PipelineTrigger...
 		if owner.Kind != "PipelineTrigger" {
 			return nil
 		}
