@@ -34,7 +34,7 @@ func NewRecorder() *Recorder {
 				Name: "pipelinetrigger_reconcile_condition",
 				Help: "The status of the pipeline trigger's last started pipeline run",
 			},
-			[]string{"kind", "name", "namespace", "sourcekind", "name", "type", "status"},
+			[]string{"kind", "name", "namespace", "sourcekind", "repo", "type", "status"},
 		),
 	}
 }
