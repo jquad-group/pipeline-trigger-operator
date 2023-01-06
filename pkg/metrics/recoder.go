@@ -17,8 +17,9 @@ limitations under the License.
 package controllers
 
 import (
+	pipelinev1alpha1 "github.com/jquad-group/pipeline-trigger-operator/api/v1alpha1"
+	sourceApi "github.com/jquad-group/pipeline-trigger-operator/pkg/source"
 	"github.com/prometheus/client_golang/prometheus"
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -33,7 +34,7 @@ func NewRecorder() *Recorder {
 				Name: "pipelinetrigger_reconcile_condition",
 				Help: "The status of the pipeline trigger's last started pipeline run",
 			},
-			[]string{"kind", "name", "namespace", "type", "status"},
+			[]string{"kind", "name", "namespace", "sourcekind", "name", "type", "status"},
 		),
 	}
 }
@@ -44,14 +45,18 @@ func (r *Recorder) Collectors() []prometheus.Collector {
 	}
 }
 
-func (r *Recorder) RecordCondition(ref corev1.ObjectReference, condition metav1.Condition) {
+func (r *Recorder) RecordCondition(ref pipelinev1alpha1.PipelineTrigger, sourceSubscriber sourceApi.SourceSubscriber) {
+	names, conditions := sourceSubscriber.GetLastConditions(&ref)
+
 	for _, status := range []string{string(metav1.ConditionTrue), string(metav1.ConditionFalse), string(metav1.ConditionUnknown)} {
-		var value float64
+		for conditionCnt := range conditions {
+			var value float64
 
-		if status == string(condition.Status) {
-			value = 1
+			if status == string(conditions[conditionCnt].Status) {
+				value = 1
+			}
+
+			r.conditionGauge.WithLabelValues(ref.Kind, ref.Name, ref.Namespace, ref.Spec.Source.Kind, names[conditionCnt], conditions[conditionCnt].Type, status).Set(value)
 		}
-
-		r.conditionGauge.WithLabelValues(ref.Kind, ref.Name, ref.Namespace, condition.Type, status).Set(value)
 	}
 }

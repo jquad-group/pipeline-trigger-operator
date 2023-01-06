@@ -31,7 +31,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
-	"k8s.io/client-go/tools/reference"
 	"k8s.io/utils/pointer"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -170,14 +169,9 @@ func (r *PipelineTriggerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	if errStatus != nil {
 		r.recorder.Event(&pipelineTrigger, core.EventTypeWarning, "Warning", errStatus.Error())
 	}
-	testCondition := metav1.Condition{
-		Type:    "Ready",
-		Status:  metav1.ConditionTrue,
-		Reason:  "ReconciliationSucceeded",
-		Message: "Latest image tag for 'ghcr.io/test/test' resolved to: v0.0.1",
-	}
-	objRef, _ := reference.GetReference(r.Scheme, &pipelineTrigger)
-	r.MetricsRecorder.RecordCondition(*objRef, testCondition)
+
+	//objRef, _ := reference.GetReference(r.Scheme, &pipelineTrigger)
+	r.MetricsRecorder.RecordCondition(pipelineTrigger, sourceSubscriber)
 
 	return ctrl.Result{}, nil
 

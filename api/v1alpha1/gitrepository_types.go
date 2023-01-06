@@ -2,6 +2,7 @@ package v1alpha1
 
 import (
 	"encoding/json"
+	"sort"
 	"strings"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
@@ -103,6 +104,23 @@ func (gitRepository *GitRepository) GetCondition(conditionType string) (metav1.C
 		}
 	}
 	return metav1.Condition{}, false
+}
+
+// GetLastCondition retruns the last condition based on the condition timestamp. if no condition is present it return false.
+func (gitRepository *GitRepository) GetLastCondition() metav1.Condition {
+	if len(gitRepository.Conditions) == 0 {
+		return metav1.Condition{}
+	}
+	//we need to make a copy of the slice
+	copiedConditions := []metav1.Condition{}
+	for _, condition := range gitRepository.Conditions {
+		ccondition := condition.DeepCopy()
+		copiedConditions = append(copiedConditions, *ccondition)
+	}
+	sort.Slice(copiedConditions, func(i, j int) bool {
+		return copiedConditions[i].LastTransitionTime.Before(&copiedConditions[j].LastTransitionTime)
+	})
+	return copiedConditions[len(copiedConditions)-1]
 }
 
 func (gitRepository *GitRepository) Rewrite() string {

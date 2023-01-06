@@ -1,6 +1,7 @@
 package v1alpha1
 
 import (
+	"sort"
 	"strings"
 
 	pullrequestv1alpha1 "github.com/jquad-group/pullrequest-operator/api/v1alpha1"
@@ -98,4 +99,21 @@ func (branch *Branch) GetCondition(conditionType string) (metav1.Condition, bool
 		}
 	}
 	return metav1.Condition{}, false
+}
+
+// GetLastCondition retruns the last condition based on the condition timestamp. if no condition is present it return false.
+func (branch *Branch) GetLastCondition() metav1.Condition {
+	if len(branch.Conditions) == 0 {
+		return metav1.Condition{}
+	}
+	//we need to make a copy of the slice
+	copiedConditions := []metav1.Condition{}
+	for _, condition := range branch.Conditions {
+		ccondition := condition.DeepCopy()
+		copiedConditions = append(copiedConditions, *ccondition)
+	}
+	sort.Slice(copiedConditions, func(i, j int) bool {
+		return copiedConditions[i].LastTransitionTime.Before(&copiedConditions[j].LastTransitionTime)
+	})
+	return copiedConditions[len(copiedConditions)-1]
 }

@@ -279,3 +279,15 @@ func (pullrequestSubscriber *PullrequestSubscriber) HasIntersection(map1 map[str
 	}
 	return true
 }
+
+func (pullrequestSubscriber PullrequestSubscriber) GetLastConditions(pipelineTrigger *pipelinev1alpha1.PipelineTrigger) ([]string, []v1.Condition) {
+	var conditions []v1.Condition
+	var names []string
+	for key := range pipelineTrigger.Status.Branches.Branches {
+		tempBranch := pipelineTrigger.Status.Branches.Branches[key]
+		conditions = append(conditions, tempBranch.GetLastCondition())
+		names = append(names, tempBranch.Name)
+	}
+	return names, conditions
+
+}
