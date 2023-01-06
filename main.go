@@ -29,15 +29,16 @@ import (
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
+	pipelinev1alpha1 "github.com/jquad-group/pipeline-trigger-operator/api/v1alpha1"
+	"github.com/jquad-group/pipeline-trigger-operator/controllers"
+	metricsApi "github.com/jquad-group/pipeline-trigger-operator/pkg/metrics"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
-
-	pipelinev1alpha1 "github.com/jquad-group/pipeline-trigger-operator/api/v1alpha1"
-	"github.com/jquad-group/pipeline-trigger-operator/controllers"
+	crtlruntimemetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 
 	imagereflectorv1 "github.com/fluxcd/image-reflector-controller/api/v1beta1"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
@@ -87,6 +88,9 @@ func main() {
 	flag.Parse()
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+
+	metricsRecorder := metricsApi.NewRecorder()
+	crtlruntimemetrics.Registry.MustRegister(metricsRecorder.Collectors()...)
 
 	if enableCrossDatacenterLeaderElection {
 		logger := gohclog.Default()
@@ -179,8 +183,9 @@ func main() {
 		}
 
 		if err = (&controllers.PipelineTriggerReconciler{
-			Client: mgr.GetClient(),
-			Scheme: mgr.GetScheme(),
+			Client:          mgr.GetClient(),
+			Scheme:          mgr.GetScheme(),
+			MetricsRecorder: metricsRecorder,
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "PipelineTrigger")
 			os.Exit(1)
