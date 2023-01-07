@@ -160,32 +160,13 @@
     },
     {
       "datasource": {
-        "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
-      "description": "It lists all PipelineTrigger with succesfull reconciliation and the PipelineRun is in either status successful, completed, failed or cancelled.",
+      "description": "",
       "fieldConfig": {
         "defaults": {
-          "custom": {
-            "displayMode": "auto",
-            "filterable": true,
-            "inspect": false
-          },
-          "mappings": [
-            {
-              "options": {
-                "0": {
-                  "index": 1,
-                  "text": "Error"
-                },
-                "1": {
-                  "index": 0,
-                  "text": "Success"
-                }
-              },
-              "type": "value"
-            }
-          ],
+          "decimals": 0,
+          "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -195,64 +176,35 @@
               },
               {
                 "color": "red",
-                "value": 0
-              },
-              {
-                "color": "blue",
-                "value": 1
-              }
-            ]
-          }
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Type"
-            },
-            "properties": [
-              {
-                "id": "custom.displayMode",
-                "value": "color-background"
+                "value": 100
               }
             ]
           },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Status"
-            },
-            "properties": [
-              {
-                "id": "custom.displayMode",
-                "value": "color-background"
-              }
-            ]
-          }
-        ]
+          "unit": "short"
+        },
+        "overrides": []
       },
       "gridPos": {
-        "h": 11,
-        "w": 12,
+        "h": 5,
+        "w": 6,
         "x": 12,
         "y": 0
       },
-      "id": 32,
+      "id": 24,
       "options": {
-        "footer": {
-          "fields": "",
-          "reducer": [
-            "sum"
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "last"
           ],
-          "show": false
+          "fields": "",
+          "values": false
         },
-        "showHeader": true,
-        "sortBy": [
-          {
-            "desc": true,
-            "displayName": "Status"
-          }
-        ]
+        "text": {},
+        "textMode": "value"
       },
       "pluginVersion": "9.3.1",
       "targets": [
@@ -260,57 +212,14 @@
           "datasource": {
             "uid": "${DS_PROMETHEUS}"
           },
-          "editorMode": "code",
-          "exemplar": true,
-          "expr": "pipelinetrigger_reconcile_condition{type=\"Success\",status=~\"True|False\",kind=~\"PipelineTrigger\"} == 1",
-          "format": "table",
-          "instant": true,
+          "expr": "sum(go_info{namespace=\"$namespace\",pod=~\".*-controller-.*\"})",
           "interval": "",
-          "legendFormat": "",
+          "legendFormat": "pods",
           "refId": "A"
         }
       ],
-      "title": "PipelineTrigger reconciliation readiness ",
-      "transformations": [
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": {
-              "Time": true,
-              "Value": true,
-              "__name__": true,
-              "app": true,
-              "container": true,
-              "endpoint": true,
-              "exported_namespace": false,
-              "instance": true,
-              "job": true,
-              "kubernetes_namespace": true,
-              "kubernetes_pod_name": true,
-              "namespace": true,
-              "pod": true,
-              "pod_template_hash": true,
-              "repo": false,
-              "service": true,
-              "sourcekind": true,
-              "status": false,
-              "type": false
-            },
-            "indexByName": {},
-            "renameByName": {
-              "Value": "Type",
-              "exported_namespace": "Namespace",
-              "kind": "Kind",
-              "name": "Name",
-              "namespace": "Operator Namespace",
-              "repo": "Repo",
-              "status": "Status",
-              "type": "Type"
-            }
-          }
-        }
-      ],
-      "type": "table"
+      "title": "Controllers",
+      "type": "stat"
     },
     {
       "datasource": {
@@ -451,69 +360,6 @@
       "description": "",
       "fieldConfig": {
         "defaults": {
-          "decimals": 0,
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "blue",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 100
-              }
-            ]
-          },
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 5,
-        "w": 6,
-        "x": 0,
-        "y": 10
-      },
-      "id": 24,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "none",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "last"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "text": {},
-        "textMode": "value"
-      },
-      "pluginVersion": "9.3.1",
-      "targets": [
-        {
-          "datasource": {
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "expr": "sum(go_info{namespace=\"$namespace\",pod=~\".*-controller-.*\"})",
-          "interval": "",
-          "legendFormat": "pods",
-          "refId": "A"
-        }
-      ],
-      "title": "Controllers",
-      "type": "stat"
-    },
-    {
-      "datasource": {
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "description": "",
-      "fieldConfig": {
-        "defaults": {
           "mappings": [],
           "thresholds": {
             "mode": "absolute",
@@ -539,8 +385,8 @@
       "gridPos": {
         "h": 5,
         "w": 6,
-        "x": 6,
-        "y": 10
+        "x": 12,
+        "y": 5
       },
       "id": 25,
       "options": {
@@ -572,6 +418,176 @@
       "type": "gauge"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "It lists all PipelineTrigger with succesfull reconciliation and the PipelineRun is in either status successful, completed, failed or cancelled.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "displayMode": "auto",
+            "filterable": true,
+            "inspect": false
+          },
+          "mappings": [
+            {
+              "options": {
+                "0": {
+                  "index": 1,
+                  "text": "Error"
+                },
+                "1": {
+                  "index": 0,
+                  "text": "Success"
+                },
+                "2": {
+                  "index": 3,
+                  "text": "False"
+                },
+                "3": {
+                  "index": 2,
+                  "text": "True"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 0
+              },
+              {
+                "color": "blue",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 2
+              },
+              {
+                "color": "blue",
+                "value": 3
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Type"
+            },
+            "properties": [
+              {
+                "id": "custom.displayMode",
+                "value": "color-background"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Status"
+            },
+            "properties": [
+              {
+                "id": "custom.displayMode",
+                "value": "color-background"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 18,
+        "x": 0,
+        "y": 10
+      },
+      "id": 32,
+      "options": {
+        "footer": {
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "Status"
+          }
+        ]
+      },
+      "pluginVersion": "9.3.1",
+      "targets": [
+        {
+          "datasource": {
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "exemplar": true,
+          "expr": "pipelinetrigger_reconcile_condition{type=\"Success\",status=~\"True|False\",kind=~\"PipelineTrigger\"} == 1",
+          "format": "table",
+          "instant": true,
+          "interval": "",
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ],
+      "title": "PipelineTrigger reconciliation readiness ",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "Value": true,
+              "__name__": true,
+              "app": true,
+              "container": true,
+              "endpoint": true,
+              "exported_namespace": false,
+              "instance": true,
+              "job": true,
+              "kubernetes_namespace": true,
+              "kubernetes_pod_name": true,
+              "namespace": true,
+              "pod": true,
+              "pod_template_hash": true,
+              "repo": false,
+              "service": true,
+              "sourcekind": true,
+              "status": false,
+              "type": false
+            },
+            "indexByName": {},
+            "renameByName": {
+              "Value": "Type",
+              "exported_namespace": "Namespace",
+              "kind": "Kind",
+              "name": "Name",
+              "namespace": "Operator Namespace",
+              "repo": "Repo",
+              "status": "Status",
+              "type": "Type"
+            }
+          }
+        }
+      ],
+      "type": "table"
+    },
+    {
       "collapsed": false,
       "datasource": {
         "uid": "${DS_PROMETHEUS}"
@@ -580,7 +596,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 15
+        "y": 20
       },
       "id": 15,
       "panels": [],
@@ -610,7 +626,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 16
+        "y": 21
       },
       "hiddenSeries": false,
       "id": 21,
@@ -709,7 +725,7 @@
         "h": 11,
         "w": 12,
         "x": 0,
-        "y": 24
+        "y": 29
       },
       "hiddenSeries": false,
       "id": 11,
@@ -795,7 +811,7 @@
         "h": 11,
         "w": 12,
         "x": 12,
-        "y": 24
+        "y": 29
       },
       "hiddenSeries": false,
       "id": 13,
@@ -922,11 +938,22 @@
         "tagsQuery": "",
         "type": "query",
         "useTags": false
+      },
+      {
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "filters": [],
+        "hide": 0,
+        "name": "Filters",
+        "skipUrlSync": false,
+        "type": "adhoc"
       }
     ]
   },
   "time": {
-    "from": "now-15m",
+    "from": "now-5m",
     "to": "now"
   },
   "timepicker": {
