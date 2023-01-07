@@ -3,7 +3,10 @@
     "list": [
       {
         "builtIn": 1,
-        "datasource": "-- Grafana --",
+        "datasource": {
+          "type": "datasource",
+          "uid": "grafana"
+        },
         "enable": true,
         "hide": true,
         "iconColor": "rgba(0, 211, 255, 1)",
@@ -19,15 +22,18 @@
     ]
   },
   "editable": true,
-  "gnetId": null,
+  "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "id": 49,
-  "iteration": 1673027311944,
+  "id": 27,
   "links": [],
+  "liveNow": false,
   "panels": [
     {
-      "datasource": "${DS_PROMETHEUS}",
-      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Reconcile is unsuccessful",
       "fieldConfig": {
         "defaults": {
           "decimals": 0,
@@ -67,24 +73,30 @@
         "text": {},
         "textMode": "value"
       },
-      "pluginVersion": "7.5.11",
+      "pluginVersion": "9.3.1",
       "targets": [
         {
+          "datasource": {
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
           "exemplar": true,
-          "expr": "sum(pipelinetrigger_reconcile_condition{namespace=~\"$operator_namespace\",exported_namespace=~\"$namespace\",type=\"Ready\",status=\"False\",kind=~\"PipelineTrigger\"})",
+          "expr": "count(pipelinetrigger_reconcile_condition{type=\"Error\",status=\"False\",kind=~\"PipelineTrigger\"} == 1)",
           "interval": "",
           "legendFormat": "",
+          "range": true,
           "refId": "A"
         }
       ],
-      "timeFrom": null,
-      "timeShift": null,
       "title": "PipelineTrigger Failing Reconcilers",
       "type": "stat"
     },
     {
-      "datasource": "${DS_PROMETHEUS}",
-      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Reconcile is successful, but the PipelineRun is in either status successful, completed, failed or cancelled.",
       "fieldConfig": {
         "defaults": {
           "decimals": 0,
@@ -128,39 +140,47 @@
         "text": {},
         "textMode": "value"
       },
-      "pluginVersion": "7.5.11",
+      "pluginVersion": "9.3.1",
       "targets": [
         {
+          "datasource": {
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
           "exemplar": true,
-          "expr": "count(pipelinetrigger_reconcile_condition{namespace=~\"$operator_namespace\",exported_namespace=~\"$namespace\",type=\"Ready\",status=\"True\",kind=~\"PipelineTrigger\"})",
+          "expr": "count(pipelinetrigger_reconcile_condition{type=\"Success\",status=~\"True|False\",kind=~\"PipelineTrigger\"} == 1)",
           "interval": "",
           "legendFormat": "",
+          "range": true,
           "refId": "A"
         }
       ],
-      "timeFrom": null,
-      "timeShift": null,
-      "title": "PipelineTrigger Reconcilers",
+      "title": "PipelineTrigger Successful Reconcilers",
       "type": "stat"
     },
     {
-      "datasource": "${DS_PROMETHEUS}",
-      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "It lists all PipelineTrigger with succesfull reconciliation and the PipelineRun is in either status successful, completed, failed or cancelled.",
       "fieldConfig": {
         "defaults": {
           "custom": {
-            "align": null,
             "displayMode": "auto",
-            "filterable": true
+            "filterable": true,
+            "inspect": false
           },
           "mappings": [
             {
               "options": {
                 "0": {
-                  "text": "Ready"
+                  "index": 1,
+                  "text": "Error"
                 },
                 "1": {
-                  "text": "Not Ready"
+                  "index": 0,
+                  "text": "Success"
                 }
               },
               "type": "value"
@@ -174,17 +194,29 @@
                 "value": null
               },
               {
-                "color": "blue",
+                "color": "red",
                 "value": 0
               },
               {
-                "color": "red",
+                "color": "blue",
                 "value": 1
               }
             ]
           }
         },
         "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Type"
+            },
+            "properties": [
+              {
+                "id": "custom.displayMode",
+                "value": "color-background"
+              }
+            ]
+          },
           {
             "matcher": {
               "id": "byName",
@@ -222,11 +254,15 @@
           }
         ]
       },
-      "pluginVersion": "7.5.11",
+      "pluginVersion": "9.3.1",
       "targets": [
         {
+          "datasource": {
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
           "exemplar": true,
-          "expr": "pipelinetrigger_reconcile_condition{namespace=~\"$operator_namespace\",exported_namespace=~\"$namespace\",type=\"Ready\",status=\"False\",kind=~\"PipelineTrigger\"}",
+          "expr": "pipelinetrigger_reconcile_condition{type=\"Success\",status=~\"True|False\",kind=~\"PipelineTrigger\"} == 1",
           "format": "table",
           "instant": true,
           "interval": "",
@@ -234,8 +270,6 @@
           "refId": "A"
         }
       ],
-      "timeFrom": null,
-      "timeShift": null,
       "title": "PipelineTrigger reconciliation readiness ",
       "transformations": [
         {
@@ -243,6 +277,7 @@
           "options": {
             "excludeByName": {
               "Time": true,
+              "Value": true,
               "__name__": true,
               "app": true,
               "container": true,
@@ -255,16 +290,22 @@
               "namespace": true,
               "pod": true,
               "pod_template_hash": true,
-              "status": true,
-              "type": true
+              "repo": false,
+              "service": true,
+              "sourcekind": true,
+              "status": false,
+              "type": false
             },
             "indexByName": {},
             "renameByName": {
-              "Value": "Status",
+              "Value": "Type",
               "exported_namespace": "Namespace",
               "kind": "Kind",
               "name": "Name",
-              "namespace": "Operator Namespace"
+              "namespace": "Operator Namespace",
+              "repo": "Repo",
+              "status": "Status",
+              "type": "Type"
             }
           }
         }
@@ -272,7 +313,9 @@
       "type": "table"
     },
     {
-      "datasource": "${DS_PROMETHEUS}",
+      "datasource": {
+        "uid": "${DS_PROMETHEUS}"
+      },
       "description": "",
       "fieldConfig": {
         "defaults": {
@@ -320,9 +363,12 @@
         "text": {},
         "textMode": "auto"
       },
-      "pluginVersion": "7.5.11",
+      "pluginVersion": "9.3.1",
       "targets": [
         {
+          "datasource": {
+            "uid": "${DS_PROMETHEUS}"
+          },
           "expr": "max(workqueue_longest_running_processor_seconds{namespace=\"$namespace\",pod=~\".*-controller-.*\"})",
           "hide": false,
           "interval": "",
@@ -330,13 +376,13 @@
           "refId": "B"
         }
       ],
-      "timeFrom": null,
-      "timeShift": null,
       "title": "Max Work Queue",
       "type": "stat"
     },
     {
-      "datasource": "${DS_PROMETHEUS}",
+      "datasource": {
+        "uid": "${DS_PROMETHEUS}"
+      },
       "description": "",
       "fieldConfig": {
         "defaults": {
@@ -383,22 +429,25 @@
         "text": {},
         "textMode": "auto"
       },
-      "pluginVersion": "7.5.11",
+      "pluginVersion": "9.3.1",
       "targets": [
         {
+          "datasource": {
+            "uid": "${DS_PROMETHEUS}"
+          },
           "expr": "sum(rate(rest_client_requests_total{namespace=\"$namespace\",pod=~\".*-controller-.*\"}[1m]))",
           "interval": "",
           "legendFormat": "requests",
           "refId": "A"
         }
       ],
-      "timeFrom": null,
-      "timeShift": null,
       "title": "API Requests",
       "type": "stat"
     },
     {
-      "datasource": "${DS_PROMETHEUS}",
+      "datasource": {
+        "uid": "${DS_PROMETHEUS}"
+      },
       "description": "",
       "fieldConfig": {
         "defaults": {
@@ -443,22 +492,25 @@
         "text": {},
         "textMode": "value"
       },
-      "pluginVersion": "7.5.11",
+      "pluginVersion": "9.3.1",
       "targets": [
         {
+          "datasource": {
+            "uid": "${DS_PROMETHEUS}"
+          },
           "expr": "sum(go_info{namespace=\"$namespace\",pod=~\".*-controller-.*\"})",
           "interval": "",
           "legendFormat": "pods",
           "refId": "A"
         }
       ],
-      "timeFrom": null,
-      "timeShift": null,
       "title": "Controllers",
       "type": "stat"
     },
     {
-      "datasource": "${DS_PROMETHEUS}",
+      "datasource": {
+        "uid": "${DS_PROMETHEUS}"
+      },
       "description": "",
       "fieldConfig": {
         "defaults": {
@@ -504,26 +556,25 @@
         "showThresholdMarkers": true,
         "text": {}
       },
-      "pluginVersion": "7.5.11",
+      "pluginVersion": "9.3.1",
       "targets": [
         {
+          "datasource": {
+            "uid": "${DS_PROMETHEUS}"
+          },
           "expr": "sum(go_memstats_alloc_bytes{namespace=\"$namespace\",pod=~\".*-controller-.*\"})",
           "interval": "",
           "legendFormat": "",
           "refId": "A"
         }
       ],
-      "timeFrom": null,
-      "timeShift": null,
       "title": "Memory",
       "type": "gauge"
     },
     {
       "collapsed": false,
-      "datasource": "${DS_PROMETHEUS}",
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
+      "datasource": {
+        "uid": "${DS_PROMETHEUS}"
       },
       "gridPos": {
         "h": 1,
@@ -533,6 +584,14 @@
       },
       "id": 15,
       "panels": [],
+      "targets": [
+        {
+          "datasource": {
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "A"
+        }
+      ],
       "title": "Resource Usage",
       "type": "row"
     },
@@ -541,13 +600,10 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_PROMETHEUS}",
-      "decimals": null,
-      "description": "",
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
+      "datasource": {
+        "uid": "${DS_PROMETHEUS}"
       },
+      "description": "",
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
@@ -576,7 +632,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.11",
+      "pluginVersion": "9.3.1",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -586,6 +642,9 @@
       "steppedLine": false,
       "targets": [
         {
+          "datasource": {
+            "uid": "${DS_PROMETHEUS}"
+          },
           "expr": "sum(rate(rest_client_requests_total{namespace=\"$namespace\"}[1m]))",
           "hide": false,
           "interval": "",
@@ -593,6 +652,9 @@
           "refId": "A"
         },
         {
+          "datasource": {
+            "uid": "${DS_PROMETHEUS}"
+          },
           "expr": "sum(rate(rest_client_requests_total{namespace=\"$namespace\",code!~\"2..\"}[1m]))",
           "hide": false,
           "interval": "",
@@ -601,9 +663,7 @@
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "Kubernetes API Requests",
       "tooltip": {
         "shared": true,
@@ -612,36 +672,27 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
       "yaxes": [
         {
           "$$hashKey": "object:912",
-          "decimals": null,
           "format": "short",
           "label": "",
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         },
         {
           "$$hashKey": "object:913",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         }
       ],
       "yaxis": {
-        "align": false,
-        "alignLevel": null
+        "align": false
       }
     },
     {
@@ -649,10 +700,8 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_PROMETHEUS}",
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
+      "datasource": {
+        "uid": "${DS_PROMETHEUS}"
       },
       "fill": 1,
       "fillGradient": 0,
@@ -681,7 +730,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.11",
+      "pluginVersion": "9.3.1",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -691,6 +740,9 @@
       "steppedLine": false,
       "targets": [
         {
+          "datasource": {
+            "uid": "${DS_PROMETHEUS}"
+          },
           "expr": "rate(process_cpu_seconds_total{namespace=\"$namespace\",pod=~\".*-controller-.*\"}[1m])",
           "interval": "",
           "legendFormat": "{{pod}}",
@@ -698,9 +750,7 @@
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "CPU Usage",
       "tooltip": {
         "shared": true,
@@ -709,9 +759,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -719,25 +767,18 @@
         {
           "$$hashKey": "object:93",
           "format": "s",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         },
         {
           "$$hashKey": "object:94",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         }
       ],
       "yaxis": {
-        "align": false,
-        "alignLevel": null
+        "align": false
       }
     },
     {
@@ -745,10 +786,8 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_PROMETHEUS}",
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
+      "datasource": {
+        "uid": "${DS_PROMETHEUS}"
       },
       "fill": 1,
       "fillGradient": 0,
@@ -777,7 +816,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.5.11",
+      "pluginVersion": "9.3.1",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -787,6 +826,9 @@
       "steppedLine": false,
       "targets": [
         {
+          "datasource": {
+            "uid": "${DS_PROMETHEUS}"
+          },
           "expr": "sum(container_memory_working_set_bytes{namespace=\"$namespace\",container!=\"POD\",container!=\"\",pod=~\".*-controller-.*\"}) by (pod)",
           "hide": false,
           "interval": "",
@@ -795,9 +837,7 @@
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "Memory Usage",
       "tooltip": {
         "shared": true,
@@ -806,9 +846,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -819,28 +857,22 @@
           "format": "bytes",
           "label": "",
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         },
         {
           "$$hashKey": "object:94",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         }
       ],
       "yaxis": {
-        "align": false,
-        "alignLevel": null
+        "align": false
       }
     }
   ],
   "refresh": "10s",
-  "schemaVersion": 27,
+  "schemaVersion": 37,
   "style": "light",
   "tags": [],
   "templating": {
@@ -851,11 +883,8 @@
           "text": "Prometheus",
           "value": "Prometheus"
         },
-        "description": null,
-        "error": null,
         "hide": 2,
         "includeAll": false,
-        "label": null,
         "multi": false,
         "name": "DS_PROMETHEUS",
         "options": [],
@@ -866,19 +895,18 @@
         "type": "datasource"
       },
       {
-        "allValue": null,
         "current": {
           "selected": false,
-          "text": "default",
-          "value": "default"
+          "text": "pipeline-trigger-operator-system",
+          "value": "pipeline-trigger-operator-system"
         },
-        "datasource": "${DS_PROMETHEUS}",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
         "definition": "workqueue_work_duration_seconds_count",
-        "description": null,
-        "error": null,
         "hide": 0,
         "includeAll": false,
-        "label": null,
         "multi": false,
         "name": "namespace",
         "options": [],
@@ -891,7 +919,6 @@
         "skipUrlSync": false,
         "sort": 0,
         "tagValuesQuery": "",
-        "tags": [],
         "tagsQuery": "",
         "type": "query",
         "useTags": false
@@ -918,5 +945,6 @@
   "timezone": "",
   "title": "Pipeline Trigger Controller Dashboard",
   "uid": "pipeline-trigger-controller-dashboard",
-  "version": 1
+  "version": 1,
+  "weekStart": ""
 }
