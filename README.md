@@ -90,7 +90,6 @@ the branch name can be extracted from the `Details` using the expression `$.bran
 
 # Installation
 
-
 Run the following command: 
 ```
 kubectl apply -f https://github.com/jquad-group/pipeline-trigger-operator/releases/latest/download/release.yaml
@@ -99,6 +98,23 @@ kubectl apply -f https://github.com/jquad-group/pipeline-trigger-operator/releas
 The operator is installed in the `pipeline-trigger-operator-system` namespace. 
 
 After the installation of the operator, the `PipelineTrigger` resource is added to the kubernetes cluster.
+
+# Install with Monitoring Support
+
+The Pipeline Trigger Operator utilizes the following components:
+- Prometheus Operator
+- Prometheus
+- Grafana 
+
+Run the following command: 
+```
+kubectl apply -f https://github.com/jquad-group/pipeline-trigger-operator/releases/latest/download/release-with-monitoring.yaml
+```
+
+Then you can import the dashboard in Grafana from `config/dashboard/dashboard.json`.
+
+![Dashboard](https://github.com/jquad-group/pipeline-trigger-operator/blob/main/img/dashboard.png)
+
 
 # Cross Data Center Distribution Lock
 

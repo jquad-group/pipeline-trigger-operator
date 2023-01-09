@@ -171,7 +171,9 @@ func (r *PipelineTriggerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	}
 
 	//objRef, _ := reference.GetReference(r.Scheme, &pipelineTrigger)
-	r.MetricsRecorder.RecordCondition(pipelineTrigger, sourceSubscriber)
+	if r.MetricsRecorder != nil {
+		r.MetricsRecorder.RecordCondition(pipelineTrigger, sourceSubscriber)
+	}
 
 	return ctrl.Result{}, nil
 
