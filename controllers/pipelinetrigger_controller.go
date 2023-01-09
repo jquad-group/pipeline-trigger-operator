@@ -20,7 +20,9 @@ import (
 	"context"
 
 	imagereflectorv1 "github.com/fluxcd/image-reflector-controller/api/v1beta1"
+
 	"github.com/go-logr/logr"
+
 	core "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -43,6 +45,7 @@ import (
 	pipelinev1alpha1 "github.com/jquad-group/pipeline-trigger-operator/api/v1alpha1"
 	pipelinev1alpha1predicate "github.com/jquad-group/pipeline-trigger-operator/pkg/predicate"
 
+	metricsApi "github.com/jquad-group/pipeline-trigger-operator/pkg/metrics"
 	sourceApi "github.com/jquad-group/pipeline-trigger-operator/pkg/source"
 	pullrequestv1alpha1 "github.com/jquad-group/pullrequest-operator/api/v1alpha1"
 	tektondevv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
@@ -60,9 +63,10 @@ const (
 // PipelineTriggerReconciler reconciles a PipelineTrigger object
 type PipelineTriggerReconciler struct {
 	client.Client
-	Log      logr.Logger
-	Scheme   *runtime.Scheme
-	recorder record.EventRecorder
+	Log             logr.Logger
+	Scheme          *runtime.Scheme
+	recorder        record.EventRecorder
+	MetricsRecorder *metricsApi.Recorder
 }
 
 // +kubebuilder:docs-gen:collapse=Reconciler Declaration
@@ -166,6 +170,11 @@ func (r *PipelineTriggerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		r.recorder.Event(&pipelineTrigger, core.EventTypeWarning, "Warning", errStatus.Error())
 	}
 
+	//objRef, _ := reference.GetReference(r.Scheme, &pipelineTrigger)
+	if r.MetricsRecorder != nil {
+		r.MetricsRecorder.RecordCondition(pipelineTrigger, sourceSubscriber)
+	}
+
 	return ctrl.Result{}, nil
 
 }
@@ -225,7 +234,7 @@ func (r *PipelineTriggerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		if owner == nil {
 			return nil
 		}
-		// ...make sure it's a CronJob...
+		// ...make sure it's a PipelineTrigger...
 		if owner.Kind != "PipelineTrigger" {
 			return nil
 		}

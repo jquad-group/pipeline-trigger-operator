@@ -203,3 +203,11 @@ func (gitrepositorySubscriber *GitrepositorySubscriber) HasIntersection(map1 map
 	}
 	return true
 }
+
+func (gitrepositorySubscriber GitrepositorySubscriber) GetLastConditions(pipelineTrigger *pipelinev1alpha1.PipelineTrigger) ([]string, []v1.Condition) {
+	var conditions []v1.Condition
+	var names []string
+	conditions = append(conditions, pipelineTrigger.Status.GitRepository.GetLastCondition())
+	names = append(names, pipelineTrigger.Status.GitRepository.BranchName)
+	return names, conditions
+}

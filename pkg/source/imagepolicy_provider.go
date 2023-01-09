@@ -205,3 +205,11 @@ func (imagepolicySubscriber *ImagepolicySubscriber) HasIntersection(map1 map[str
 	}
 	return true
 }
+
+func (imagepolicySubscriber ImagepolicySubscriber) GetLastConditions(pipelineTrigger *pipelinev1alpha1.PipelineTrigger) ([]string, []v1.Condition) {
+	var conditions []v1.Condition
+	var names []string
+	conditions = append(conditions, pipelineTrigger.Status.ImagePolicy.GetLastCondition())
+	names = append(names, pipelineTrigger.Status.ImagePolicy.ImageName)
+	return names, conditions
+}

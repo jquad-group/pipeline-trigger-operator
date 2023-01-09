@@ -4,8 +4,8 @@ import (
 	"context"
 
 	pipelinev1alpha1 "github.com/jquad-group/pipeline-trigger-operator/api/v1alpha1"
-
 	tektondevv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -22,4 +22,5 @@ type SourceSubscriber interface {
 	SetCurrentPipelineRunStatus(pipelineRunList tektondevv1.PipelineRunList, obj *pipelinev1alpha1.PipelineTrigger)
 	CalculateCurrentState(ctx context.Context, pipelineTrigger *pipelinev1alpha1.PipelineTrigger, client client.Client, pipelineRunList tektondevv1.PipelineRunList) bool
 	HasIntersection(map1 map[string]string, map2 map[string]string) bool
+	GetLastConditions(pipelineTrigger *pipelinev1alpha1.PipelineTrigger) ([]string, []metav1.Condition)
 }

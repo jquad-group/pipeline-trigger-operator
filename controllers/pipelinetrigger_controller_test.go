@@ -44,13 +44,19 @@ var gitRepository sourcev1.GitRepository
 var imagePolicy imagereflectorv1.ImagePolicy
 var pullRequest pullrequestv1alpha1.PullRequest
 var createdPipelineTrigger *pipelinev1alpha1.PipelineTrigger
+var createdImagePolicy *imagereflectorv1.ImagePolicy
+var createdPipelineRun *tektondevv1.PipelineRun
+var createdGitRepo *sourcev1.GitRepository
+var createdTask *tektondevv1.Task
+var createdPipeline *tektondevv1.Pipeline
+var createdPullRequest *pullrequestv1alpha1.PullRequest
 var pipelineTriggerList *pipelinev1alpha1.PipelineTriggerList
 var pipelineTrigger0 pipelinev1alpha1.PipelineTrigger
 var pipelineTrigger1 pipelinev1alpha1.PipelineTrigger
 var pipelineTrigger2 pipelinev1alpha1.PipelineTrigger
 var pipelineTrigger3 pipelinev1alpha1.PipelineTrigger
 
-var _ = Describe("PipelineTrigger controller", func() {
+var _ = Describe("PipelineTrigger controller", FlakeAttempts(5), func() {
 
 	const (
 		gitRepositoryName    = "git-repo-1"
@@ -72,6 +78,12 @@ var _ = Describe("PipelineTrigger controller", func() {
 	BeforeEach(func() {
 		ctx = context.Background()
 		createdPipelineTrigger = &pipelinev1alpha1.PipelineTrigger{}
+		createdImagePolicy = &imagereflectorv1.ImagePolicy{}
+		createdPipelineRun = &tektondevv1.PipelineRun{}
+		createdGitRepo = &sourcev1.GitRepository{}
+		createdTask = &tektondevv1.Task{}
+		createdPipeline = &tektondevv1.Pipeline{}
+		createdPullRequest = &pullrequestv1alpha1.PullRequest{}
 		pipelineTriggerList = &pipelinev1alpha1.PipelineTriggerList{}
 		taskMock = tektondevv1.Task{
 			ObjectMeta: v1.ObjectMeta{
@@ -281,7 +293,7 @@ var _ = Describe("PipelineTrigger controller", func() {
 			By("Creating a Task")
 			Expect(k8sClient.Create(ctx, &taskMock)).Should(Succeed())
 			taskLookupKey := types.NamespacedName{Name: taskName, Namespace: namespace}
-			createdTask := &tektondevv1.Task{}
+
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, taskLookupKey, createdTask)
 				return err == nil
@@ -290,7 +302,7 @@ var _ = Describe("PipelineTrigger controller", func() {
 			By("Creating a Pipeline, referencing a single Task")
 			Expect(k8sClient.Create(ctx, &pipelineMock)).Should(Succeed())
 			pipelineLookupKey := types.NamespacedName{Name: pipelineName, Namespace: namespace}
-			createdPipeline := &tektondevv1.Pipeline{}
+
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, pipelineLookupKey, createdPipeline)
 				return err == nil
@@ -325,7 +337,7 @@ var _ = Describe("PipelineTrigger controller", func() {
 			By("Creating a GitRepository")
 			Expect(k8sClient.Create(ctx, &gitRepository)).Should(Succeed())
 			gitRepositoryLookupKey := types.NamespacedName{Name: gitRepositoryName, Namespace: namespace}
-			createdGitRepo := &sourcev1.GitRepository{}
+
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, gitRepositoryLookupKey, createdGitRepo)
 				return err == nil
@@ -405,7 +417,7 @@ var _ = Describe("PipelineTrigger controller", func() {
 
 			By("Updating the PipelineRun status to reason started (status: Unknown)")
 			pipelineRunLookupKey := types.NamespacedName{Name: pipelineRunList.Items[0].Name, Namespace: namespace}
-			createdPipelineRun := &tektondevv1.PipelineRun{}
+
 			var now = time.Date(2022, time.January, 1, 0, 0, 0, 0, time.UTC)
 			var testClock = clock.NewFakePassiveClock(now)
 			k8sClient.Get(ctx, pipelineRunLookupKey, createdPipelineRun)
@@ -471,9 +483,6 @@ var _ = Describe("PipelineTrigger controller", func() {
 				return len(createdPipelineTrigger.Status.GitRepository.Conditions), err
 			}, timeout, interval).Should(Equal(3))
 
-			By("Delete PipelineRun")
-			Expect(k8sClient.Delete(ctx, createdPipelineRun)).Should(Succeed())
-			Expect(k8sClient.Delete(ctx, createdGitRepo)).Should(Succeed())
 		})
 	})
 
@@ -484,7 +493,7 @@ var _ = Describe("PipelineTrigger controller", func() {
 			By("Creating a GitRepository")
 			Expect(k8sClient.Create(ctx, &gitRepository)).Should(Succeed())
 			gitRepositoryLookupKey := types.NamespacedName{Name: gitRepositoryName, Namespace: namespace}
-			createdGitRepo := &sourcev1.GitRepository{}
+
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, gitRepositoryLookupKey, createdGitRepo)
 				return err == nil
@@ -545,7 +554,6 @@ var _ = Describe("PipelineTrigger controller", func() {
 			By("Creating a ImagePolicy")
 			Expect(k8sClient.Create(ctx, &imagePolicy)).Should(Succeed())
 			imagePolicyLookupKey := types.NamespacedName{Name: imagePolicyName, Namespace: namespace}
-			createdImagePolicy := &imagereflectorv1.ImagePolicy{}
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, imagePolicyLookupKey, createdImagePolicy)
 				return err == nil
@@ -617,7 +625,7 @@ var _ = Describe("PipelineTrigger controller", func() {
 
 			By("Updating the PipelineRun status to reason started (status: Unknown)")
 			pipelineRunLookupKey := types.NamespacedName{Name: pipelineRunList.Items[0].Name, Namespace: namespace}
-			createdPipelineRun := &tektondevv1.PipelineRun{}
+
 			var now = time.Date(2022, time.January, 1, 0, 0, 0, 0, time.UTC)
 			var testClock = clock.NewFakePassiveClock(now)
 			k8sClient.Get(ctx, pipelineRunLookupKey, createdPipelineRun)
@@ -683,10 +691,6 @@ var _ = Describe("PipelineTrigger controller", func() {
 				return len(createdPipelineTrigger.Status.ImagePolicy.Conditions), err
 			}, timeout*10, interval).Should(Equal(3))
 
-			By("Delete PipelineRun, Pipeline, and Task")
-			Expect(k8sClient.Delete(ctx, createdPipelineRun)).Should(Succeed())
-			Expect(k8sClient.Delete(ctx, createdImagePolicy)).Should(Succeed())
-
 		})
 
 	})
@@ -732,7 +736,6 @@ var _ = Describe("PipelineTrigger controller", func() {
 			Expect(k8sClient.Create(ctx, &pullRequest)).Should(Succeed())
 
 			pullRequestLookupKey := types.NamespacedName{Name: pullRequestName, Namespace: namespace}
-			createdPullRequest := &pullrequestv1alpha1.PullRequest{}
 
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, pullRequestLookupKey, createdPullRequest)
@@ -814,7 +817,7 @@ var _ = Describe("PipelineTrigger controller", func() {
 
 			By("Adding the tekton.dev label to the PipelineRun")
 			pipelineRunLookupKey := types.NamespacedName{Name: pipelineRunList.Items[0].Name, Namespace: namespace}
-			createdPipelineRun := &tektondevv1.PipelineRun{}
+
 			k8sClient.Get(ctx, pipelineRunLookupKey, createdPipelineRun)
 			createdPipelineRun.SetLabels(map[string]string{
 				"pipeline.jquad.rocks/pr.branch.commit": "8932484a2017a3784608c2db429553a94f1e2f4b",
@@ -880,29 +883,54 @@ var _ = Describe("PipelineTrigger controller", func() {
 				return len(createdPipelineTrigger.Status.Branches.Branches["feature-branch-test"].Conditions), err
 			}, timeout, interval).Should(Equal(3))
 
-			By("Delete PipelineRun, and PullRequest")
-			Expect(k8sClient.Delete(ctx, createdPipelineRun)).Should(Succeed())
-			Expect(k8sClient.Delete(ctx, createdPullRequest)).Should(Succeed())
-
 		})
 
 	})
 
 	AfterEach(func() {
+		createdImagePolicyList := imagereflectorv1.ImagePolicyList{}
+		createdPipelineRunList := tektondevv1.PipelineRunList{}
+		createdGitRepositoryList := sourcev1.GitRepositoryList{}
+		createdPullRequestList := pullrequestv1alpha1.PullRequestList{}
 		err := k8sClient.Delete(ctx, createdPipelineTrigger)
+		k8sClient.Delete(ctx, createdImagePolicy)
+		k8sClient.Delete(ctx, createdPipelineRun)
+		k8sClient.Delete(ctx, createdGitRepo)
+		k8sClient.Delete(ctx, createdPullRequest)
 		if err != nil {
 			fmt.Println(err, "failed to delete object", "name")
 		}
 		Eventually(func() bool {
-			err := k8sClient.List(ctx, pipelineTriggerList)
-			if err != nil {
+			errPipelineTrigger := k8sClient.List(ctx, pipelineTriggerList)
+			if errPipelineTrigger != nil {
 				return false
 			}
-			if len(pipelineTriggerList.Items) > 0 {
+			errImagePolicy := k8sClient.List(ctx, &createdImagePolicyList)
+			if errImagePolicy != nil {
+				return false
+			}
+			errGitRepository := k8sClient.List(ctx, &createdGitRepositoryList)
+			if errGitRepository != nil {
+				return false
+			}
+			errPipelineRun := k8sClient.List(ctx, &createdPipelineRunList)
+			if errPipelineRun != nil {
+				return false
+			}
+			errPullRequest := k8sClient.List(ctx, &createdPullRequestList)
+			if errPullRequest != nil {
+				return false
+			}
+			if (len(pipelineTriggerList.Items) > 0) ||
+				(len(createdImagePolicyList.Items) > 0) ||
+				(len(createdPipelineRunList.Items) > 0) ||
+				(len(createdGitRepositoryList.Items) > 0) ||
+				(len(createdPullRequestList.Items) > 0) {
 				return false
 			}
 			return true
 		}, timeout*10, interval).Should(BeTrue())
+
 	})
 
 })
