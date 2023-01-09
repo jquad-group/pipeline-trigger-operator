@@ -95,6 +95,11 @@ Run the following command:
 kubectl apply -f https://github.com/jquad-group/pipeline-trigger-operator/releases/latest/download/release.yaml
 ```
 
+or with RBAC Proxy:
+```
+kubectl apply -f https://github.com/jquad-group/pipeline-trigger-operator/releases/latest/download/release-with-rbac-proxy.yaml
+```
+
 The operator is installed in the `pipeline-trigger-operator-system` namespace. 
 
 After the installation of the operator, the `PipelineTrigger` resource is added to the kubernetes cluster.
