@@ -3,30 +3,21 @@
     "list": [
       {
         "builtIn": 1,
-        "datasource": {
-          "type": "datasource",
-          "uid": "grafana"
-        },
+        "datasource": "-- Grafana --",
         "enable": true,
         "hide": true,
         "iconColor": "rgba(0, 211, 255, 1)",
         "name": "Annotations & Alerts",
-        "target": {
-          "limit": 100,
-          "matchAny": false,
-          "tags": [],
-          "type": "dashboard"
-        },
         "type": "dashboard"
       }
     ]
   },
   "editable": true,
-  "fiscalYearStartMonth": 0,
+  "gnetId": null,
   "graphTooltip": 0,
-  "id": 27,
+  "id": 57,
+  "iteration": 1673370832383,
   "links": [],
-  "liveNow": false,
   "panels": [
     {
       "datasource": "$datasource",
@@ -70,7 +61,7 @@
         "text": {},
         "textMode": "value"
       },
-      "pluginVersion": "9.3.1",
+      "pluginVersion": "7.5.11",
       "targets": [
         {
           "datasource": "$datasource",
@@ -132,7 +123,7 @@
         "text": {},
         "textMode": "value"
       },
-      "pluginVersion": "9.3.1",
+      "pluginVersion": "7.5.11",
       "targets": [
         {
           "datasource": "$datasource",
@@ -194,7 +185,7 @@
         "text": {},
         "textMode": "value"
       },
-      "pluginVersion": "9.3.1",
+      "pluginVersion": "7.5.11",
       "targets": [
         {
           "datasource": "$datasource",
@@ -256,7 +247,7 @@
         "text": {},
         "textMode": "auto"
       },
-      "pluginVersion": "9.3.1",
+      "pluginVersion": "7.5.11",
       "targets": [
         {
           "datasource": "$datasource",
@@ -318,7 +309,7 @@
         "text": {},
         "textMode": "auto"
       },
-      "pluginVersion": "9.3.1",
+      "pluginVersion": "7.5.11",
       "targets": [
         {
           "datasource": "$datasource",
@@ -378,7 +369,7 @@
         "showThresholdMarkers": true,
         "text": {}
       },
-      "pluginVersion": "9.3.1",
+      "pluginVersion": "7.5.11",
       "targets": [
         {
           "datasource": "$datasource",
@@ -397,9 +388,9 @@
       "fieldConfig": {
         "defaults": {
           "custom": {
+            "align": null,
             "displayMode": "auto",
-            "filterable": true,
-            "inspect": false
+            "filterable": true
           },
           "mappings": [
             {
@@ -500,7 +491,7 @@
           }
         ]
       },
-      "pluginVersion": "9.3.1",
+      "pluginVersion": "7.5.11",
       "targets": [
         {
           "datasource": "$datasource",
@@ -583,6 +574,10 @@
       "dashes": false,
       "datasource": "$datasource",
       "description": "",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
@@ -611,7 +606,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "9.3.1",
+      "pluginVersion": "7.5.11",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -638,7 +633,9 @@
         }
       ],
       "thresholds": [],
+      "timeFrom": null,
       "timeRegions": [],
+      "timeShift": null,
       "title": "Kubernetes API Requests",
       "tooltip": {
         "shared": true,
@@ -647,7 +644,9 @@
       },
       "type": "graph",
       "xaxis": {
+        "buckets": null,
         "mode": "time",
+        "name": null,
         "show": true,
         "values": []
       },
@@ -676,6 +675,10 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "$datasource",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
@@ -703,7 +706,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "9.3.1",
+      "pluginVersion": "7.5.11",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -721,7 +724,9 @@
         }
       ],
       "thresholds": [],
+      "timeFrom": null,
       "timeRegions": [],
+      "timeShift": null,
       "title": "CPU Usage",
       "tooltip": {
         "shared": true,
@@ -730,7 +735,9 @@
       },
       "type": "graph",
       "xaxis": {
+        "buckets": null,
         "mode": "time",
+        "name": null,
         "show": true,
         "values": []
       },
@@ -758,6 +765,10 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "$datasource",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
@@ -785,7 +796,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "9.3.1",
+      "pluginVersion": "7.5.11",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -804,7 +815,9 @@
         }
       ],
       "thresholds": [],
+      "timeFrom": null,
       "timeRegions": [],
+      "timeShift": null,
       "title": "Memory Usage",
       "tooltip": {
         "shared": true,
@@ -813,7 +826,9 @@
       },
       "type": "graph",
       "xaxis": {
+        "buckets": null,
         "mode": "time",
+        "name": null,
         "show": true,
         "values": []
       },
@@ -839,7 +854,7 @@
     }
   ],
   "refresh": "10s",
-  "schemaVersion": 37,
+  "schemaVersion": 27,
   "style": "light",
   "tags": [],
   "templating": {
@@ -865,6 +880,7 @@
         "type": "datasource"
       },
       {
+        "allValue": null,
         "current": {
           "selected": false,
           "text": "pipeline-trigger-operator-system",
@@ -872,8 +888,11 @@
         },
         "datasource": "$datasource",
         "definition": "workqueue_work_duration_seconds_count",
+        "description": null,
+        "error": null,
         "hide": 0,
         "includeAll": false,
+        "label": null,
         "multi": false,
         "name": "namespace",
         "options": [],
@@ -886,17 +905,10 @@
         "skipUrlSync": false,
         "sort": 0,
         "tagValuesQuery": "",
+        "tags": [],
         "tagsQuery": "",
         "type": "query",
         "useTags": false
-      },
-      {
-        "datasource": "$datasource",
-        "filters": [],
-        "hide": 0,
-        "name": "Filters",
-        "skipUrlSync": false,
-        "type": "adhoc"
       }
     ]
   },
@@ -915,11 +927,21 @@
       "1h",
       "2h",
       "1d"
+    ],
+    "time_options": [
+      "5m",
+      "15m",
+      "1h",
+      "6h",
+      "12h",
+      "24h",
+      "2d",
+      "7d",
+      "30d"
     ]
   },
-  "timezone": "",
+  "timezone": "utc",
   "title": "Pipeline Trigger Controller Dashboard",
   "uid": "pipeline-trigger-controller-dashboard",
-  "version": 1,
-  "weekStart": ""
+  "version": 1
 }
