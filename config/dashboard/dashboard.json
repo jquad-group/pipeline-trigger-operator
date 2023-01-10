@@ -29,10 +29,7 @@
   "liveNow": false,
   "panels": [
     {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
+      "datasource": "$datasource",
       "description": "Reconcile is unsuccessful",
       "fieldConfig": {
         "defaults": {
@@ -76,9 +73,7 @@
       "pluginVersion": "9.3.1",
       "targets": [
         {
-          "datasource": {
-            "uid": "${DS_PROMETHEUS}"
-          },
+          "datasource": "$datasource",
           "editorMode": "code",
           "exemplar": true,
           "expr": "count(pipelinetrigger_reconcile_condition{type=\"Error\",status=\"False\",kind=~\"PipelineTrigger\"} == 1)",
@@ -92,10 +87,7 @@
       "type": "stat"
     },
     {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
+      "datasource": "$datasource",
       "description": "Reconcile is successful, but the PipelineRun is in either status successful, completed, failed or cancelled.",
       "fieldConfig": {
         "defaults": {
@@ -143,9 +135,7 @@
       "pluginVersion": "9.3.1",
       "targets": [
         {
-          "datasource": {
-            "uid": "${DS_PROMETHEUS}"
-          },
+          "datasource": "$datasource",
           "editorMode": "code",
           "exemplar": true,
           "expr": "count(pipelinetrigger_reconcile_condition{type=\"Success\",status=~\"True|False\",kind=~\"PipelineTrigger\"} == 1)",
@@ -159,9 +149,7 @@
       "type": "stat"
     },
     {
-      "datasource": {
-        "uid": "${DS_PROMETHEUS}"
-      },
+      "datasource": "$datasource",
       "description": "",
       "fieldConfig": {
         "defaults": {
@@ -209,9 +197,7 @@
       "pluginVersion": "9.3.1",
       "targets": [
         {
-          "datasource": {
-            "uid": "${DS_PROMETHEUS}"
-          },
+          "datasource": "$datasource",
           "expr": "sum(go_info{namespace=\"$namespace\",pod=~\".*-controller-.*\"})",
           "interval": "",
           "legendFormat": "pods",
@@ -222,9 +208,7 @@
       "type": "stat"
     },
     {
-      "datasource": {
-        "uid": "${DS_PROMETHEUS}"
-      },
+      "datasource": "$datasource",
       "description": "",
       "fieldConfig": {
         "defaults": {
@@ -275,9 +259,7 @@
       "pluginVersion": "9.3.1",
       "targets": [
         {
-          "datasource": {
-            "uid": "${DS_PROMETHEUS}"
-          },
+          "datasource": "$datasource",
           "expr": "max(workqueue_longest_running_processor_seconds{namespace=\"$namespace\",pod=~\".*-controller-.*\"})",
           "hide": false,
           "interval": "",
@@ -289,9 +271,7 @@
       "type": "stat"
     },
     {
-      "datasource": {
-        "uid": "${DS_PROMETHEUS}"
-      },
+      "datasource": "$datasource",
       "description": "",
       "fieldConfig": {
         "defaults": {
@@ -341,9 +321,7 @@
       "pluginVersion": "9.3.1",
       "targets": [
         {
-          "datasource": {
-            "uid": "${DS_PROMETHEUS}"
-          },
+          "datasource": "$datasource",
           "expr": "sum(rate(rest_client_requests_total{namespace=\"$namespace\",pod=~\".*-controller-.*\"}[1m]))",
           "interval": "",
           "legendFormat": "requests",
@@ -354,9 +332,7 @@
       "type": "stat"
     },
     {
-      "datasource": {
-        "uid": "${DS_PROMETHEUS}"
-      },
+      "datasource": "$datasource",
       "description": "",
       "fieldConfig": {
         "defaults": {
@@ -405,9 +381,7 @@
       "pluginVersion": "9.3.1",
       "targets": [
         {
-          "datasource": {
-            "uid": "${DS_PROMETHEUS}"
-          },
+          "datasource": "$datasource",
           "expr": "sum(go_memstats_alloc_bytes{namespace=\"$namespace\",pod=~\".*-controller-.*\"})",
           "interval": "",
           "legendFormat": "",
@@ -418,10 +392,7 @@
       "type": "gauge"
     },
     {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
+      "datasource": "$datasource",
       "description": "It lists all PipelineTrigger with succesfull reconciliation and the PipelineRun is in either status successful, completed, failed or cancelled.",
       "fieldConfig": {
         "defaults": {
@@ -532,9 +503,7 @@
       "pluginVersion": "9.3.1",
       "targets": [
         {
-          "datasource": {
-            "uid": "${DS_PROMETHEUS}"
-          },
+          "datasource": "$datasource",
           "editorMode": "code",
           "exemplar": true,
           "expr": "pipelinetrigger_reconcile_condition{type=\"Success\",status=~\"True|False\",kind=~\"PipelineTrigger\"} == 1",
@@ -589,9 +558,7 @@
     },
     {
       "collapsed": false,
-      "datasource": {
-        "uid": "${DS_PROMETHEUS}"
-      },
+      "datasource": "$datasource",
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -602,9 +569,7 @@
       "panels": [],
       "targets": [
         {
-          "datasource": {
-            "uid": "${DS_PROMETHEUS}"
-          },
+          "datasource": "$datasource",
           "refId": "A"
         }
       ],
@@ -616,9 +581,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": {
-        "uid": "${DS_PROMETHEUS}"
-      },
+      "datasource": "$datasource",
       "description": "",
       "fill": 1,
       "fillGradient": 0,
@@ -658,9 +621,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "datasource": {
-            "uid": "${DS_PROMETHEUS}"
-          },
+          "datasource": "$datasource",
           "expr": "sum(rate(rest_client_requests_total{namespace=\"$namespace\"}[1m]))",
           "hide": false,
           "interval": "",
@@ -668,9 +629,7 @@
           "refId": "A"
         },
         {
-          "datasource": {
-            "uid": "${DS_PROMETHEUS}"
-          },
+          "datasource": "$datasource",
           "expr": "sum(rate(rest_client_requests_total{namespace=\"$namespace\",code!~\"2..\"}[1m]))",
           "hide": false,
           "interval": "",
@@ -716,9 +675,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": {
-        "uid": "${DS_PROMETHEUS}"
-      },
+      "datasource": "$datasource",
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
@@ -756,9 +713,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "datasource": {
-            "uid": "${DS_PROMETHEUS}"
-          },
+          "datasource": "$datasource",
           "expr": "rate(process_cpu_seconds_total{namespace=\"$namespace\",pod=~\".*-controller-.*\"}[1m])",
           "interval": "",
           "legendFormat": "{{pod}}",
@@ -802,9 +757,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": {
-        "uid": "${DS_PROMETHEUS}"
-      },
+      "datasource": "$datasource",
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
@@ -842,9 +795,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "datasource": {
-            "uid": "${DS_PROMETHEUS}"
-          },
+          "datasource": "$datasource",
           "expr": "sum(container_memory_working_set_bytes{namespace=\"$namespace\",container!=\"POD\",container!=\"\",pod=~\".*-controller-.*\"}) by (pod)",
           "hide": false,
           "interval": "",
@@ -896,13 +847,16 @@
       {
         "current": {
           "selected": false,
-          "text": "Prometheus",
-          "value": "Prometheus"
+          "text": "default",
+          "value": "default"
         },
-        "hide": 2,
+        "description": null,
+        "error": null,
+        "hide": 0,
         "includeAll": false,
+        "label": null,
         "multi": false,
-        "name": "DS_PROMETHEUS",
+        "name": "datasource",
         "options": [],
         "query": "prometheus",
         "refresh": 1,
@@ -916,10 +870,7 @@
           "text": "pipeline-trigger-operator-system",
           "value": "pipeline-trigger-operator-system"
         },
-        "datasource": {
-          "type": "prometheus",
-          "uid": "${DS_PROMETHEUS}"
-        },
+        "datasource": "$datasource",
         "definition": "workqueue_work_duration_seconds_count",
         "hide": 0,
         "includeAll": false,
@@ -940,10 +891,7 @@
         "useTags": false
       },
       {
-        "datasource": {
-          "type": "prometheus",
-          "uid": "${DS_PROMETHEUS}"
-        },
+        "datasource": "$datasource",
         "filters": [],
         "hide": 0,
         "name": "Filters",
