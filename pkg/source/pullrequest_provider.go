@@ -115,6 +115,21 @@ func (pullrequestSubscriber PullrequestSubscriber) GetLatestEvent(ctx context.Co
 	return gotNewEvent, nil
 }
 
+func (pullrequestSubscriber PullrequestSubscriber) SetCurrentPipelineRunName(ctx context.Context, client client.Client, pipelineRun *tektondevv1.PipelineRun, pipelineRunName string, pipelineTrigger *pipelinev1alpha1.PipelineTrigger) {
+	if len(pipelineTrigger.Status.Branches.Branches) > 0 {
+		for key := range pipelineTrigger.Status.Branches.Branches {
+			tempBranch := pipelineTrigger.Status.Branches.Branches[key]
+			tempBranchLabels := tempBranch.GenerateBranchLabelsAsHash()
+			// This label is automatically added by the Tekton Controller
+			//tempBranchLabels["tekton.dev/pipeline"] = pipelineTrigger.Spec.PipelineRunSpec.PipelineRef.Name
+			if pullrequestSubscriber.HasIntersection(tempBranchLabels, pipelineRun.GetLabels()) {
+				tempBranch.LatestPipelineRun = pipelineRunName
+				pipelineTrigger.Status.Branches.Branches[key] = tempBranch
+			}
+		}
+	}
+}
+
 func (pullrequestSubscriber PullrequestSubscriber) CreatePipelineRunResource(pipelineTrigger *pipelinev1alpha1.PipelineTrigger, r *runtime.Scheme) []*tektondevv1.PipelineRun {
 	var prs []*tektondevv1.PipelineRun
 	for key := range pipelineTrigger.Status.Branches.Branches {
@@ -222,38 +237,39 @@ func (pullrequestSubscriber *PullrequestSubscriber) SetCurrentPipelineRunStatus(
 			tempBranchLabels["tekton.dev/pipeline"] = pipelineTrigger.Spec.PipelineRunSpec.PipelineRef.Name
 			for i := range pipelineRunList.Items {
 				if pullrequestSubscriber.HasIntersection(tempBranchLabels, pipelineRunList.Items[i].GetLabels()) {
-					tempBranch.LatestPipelineRun = pipelineRunList.Items[i].Name
-					for _, c := range pipelineRunList.Items[i].Status.Conditions {
-						if v1.ConditionStatus(c.Status) == v1.ConditionTrue {
-							condition := v1.Condition{
-								Type:               apis.ReconcileSuccess,
-								LastTransitionTime: v1.Now(),
-								ObservedGeneration: pipelineTrigger.GetGeneration(),
-								Reason:             apis.ReconcileSuccessReason,
-								Status:             v1.ConditionTrue,
-								Message:            "Reconciliation is successful.",
+					if pipelineRunList.Items[i].Name == tempBranch.LatestPipelineRun {
+						for _, c := range pipelineRunList.Items[i].Status.Conditions {
+							if v1.ConditionStatus(c.Status) == v1.ConditionTrue {
+								condition := v1.Condition{
+									Type:               apis.ReconcileSuccess,
+									LastTransitionTime: v1.Now(),
+									ObservedGeneration: pipelineTrigger.GetGeneration(),
+									Reason:             apis.ReconcileSuccessReason,
+									Status:             v1.ConditionTrue,
+									Message:            "Reconciliation is successful.",
+								}
+								tempBranch.AddOrReplaceCondition(condition)
+							} else if v1.ConditionStatus(c.Status) == v1.ConditionFalse {
+								condition := v1.Condition{
+									Type:               apis.ReconcileSuccess,
+									LastTransitionTime: v1.Now(),
+									ObservedGeneration: pipelineTrigger.GetGeneration(),
+									Reason:             c.Reason,
+									Status:             v1.ConditionFalse,
+									Message:            c.Message,
+								}
+								tempBranch.AddOrReplaceCondition(condition)
+							} else {
+								condition := v1.Condition{
+									Type:               apis.ReconcileInProgress,
+									LastTransitionTime: v1.Now(),
+									ObservedGeneration: pipelineTrigger.GetGeneration(),
+									Reason:             apis.ReconcileInProgress,
+									Status:             v1.ConditionUnknown,
+									Message:            "Progressing",
+								}
+								tempBranch.AddOrReplaceCondition(condition)
 							}
-							tempBranch.AddOrReplaceCondition(condition)
-						} else if v1.ConditionStatus(c.Status) == v1.ConditionFalse {
-							condition := v1.Condition{
-								Type:               apis.ReconcileSuccess,
-								LastTransitionTime: v1.Now(),
-								ObservedGeneration: pipelineTrigger.GetGeneration(),
-								Reason:             c.Reason,
-								Status:             v1.ConditionFalse,
-								Message:            c.Message,
-							}
-							tempBranch.AddOrReplaceCondition(condition)
-						} else {
-							condition := v1.Condition{
-								Type:               apis.ReconcileInProgress,
-								LastTransitionTime: v1.Now(),
-								ObservedGeneration: pipelineTrigger.GetGeneration(),
-								Reason:             apis.ReconcileInProgress,
-								Status:             v1.ConditionUnknown,
-								Message:            "Progressing",
-							}
-							tempBranch.AddOrReplaceCondition(condition)
 						}
 					}
 					pipelineTrigger.Status.Branches.Branches[key] = tempBranch

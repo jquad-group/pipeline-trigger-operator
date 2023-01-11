@@ -120,10 +120,12 @@ func evaluatePipelineParamsForImage(pipelineTrigger *pipelinev1alpha1.PipelineTr
 	return true, nil
 }
 
+func (imagepolicySubscriber ImagepolicySubscriber) SetCurrentPipelineRunName(ctx context.Context, client client.Client, pipelineRun *tektondevv1.PipelineRun, pipelineRunName string, pipelineTrigger *pipelinev1alpha1.PipelineTrigger) {
+	pipelineTrigger.Status.ImagePolicy.LatestPipelineRun = pipelineRunName
+}
+
 func (imagepolicySubscriber ImagepolicySubscriber) SetCurrentPipelineRunStatus(pipelineRunList tektondevv1.PipelineRunList, pipelineTrigger *pipelinev1alpha1.PipelineTrigger) {
 	for i := range pipelineRunList.Items {
-		item := pipelineRunList.Items[i]
-		pipelineTrigger.Status.ImagePolicy.LatestPipelineRun = item.Name
 		for _, c := range pipelineRunList.Items[i].Status.Conditions {
 			if v1.ConditionStatus(c.Status) == v1.ConditionTrue {
 				condition := v1.Condition{

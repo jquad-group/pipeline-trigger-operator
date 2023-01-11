@@ -149,6 +149,7 @@ func (r *PipelineTriggerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		// Start the PipelineRun resources
 		for pipelineRunCnt := 0; pipelineRunCnt < len(prs); pipelineRunCnt++ {
 			instanceName, _ := pipelineTrigger.StartPipelineRun(prs[pipelineRunCnt], ctx, req, r.Client)
+			sourceSubscriber.SetCurrentPipelineRunName(ctx, r.Client, prs[pipelineRunCnt], instanceName, &pipelineTrigger)
 			newVersionMsg := "Started the pipeline " + instanceName + " in namespace " + pipelineTrigger.Namespace
 			r.recorder.Event(&pipelineTrigger, core.EventTypeNormal, "Info", newVersionMsg)
 		}

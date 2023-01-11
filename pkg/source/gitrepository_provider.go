@@ -118,41 +118,45 @@ func evaluatePipelineParamsForGitRepository(pipelineTrigger *pipelinev1alpha1.Pi
 	return true, nil
 }
 
+func (gitrepositorySubscriber GitrepositorySubscriber) SetCurrentPipelineRunName(ctx context.Context, client client.Client, pipelineRun *tektondevv1.PipelineRun, pipelineRunName string, pipelineTrigger *pipelinev1alpha1.PipelineTrigger) {
+	pipelineTrigger.Status.GitRepository.LatestPipelineRun = pipelineRunName
+}
+
 func (gitrepositorySubscriber GitrepositorySubscriber) SetCurrentPipelineRunStatus(pipelineRunList tektondevv1.PipelineRunList, pipelineTrigger *pipelinev1alpha1.PipelineTrigger) {
 	for i := range pipelineRunList.Items {
-		item := pipelineRunList.Items[i]
-		pipelineTrigger.Status.GitRepository.LatestPipelineRun = item.Name
-		for _, c := range pipelineRunList.Items[i].Status.Conditions {
-			if v1.ConditionStatus(c.Status) == v1.ConditionTrue {
-				condition := v1.Condition{
-					Type:               apis.ReconcileSuccess,
-					LastTransitionTime: v1.Now(),
-					ObservedGeneration: pipelineTrigger.GetGeneration(),
-					Reason:             apis.ReconcileSuccessReason,
-					Status:             v1.ConditionTrue,
-					Message:            "Reconciliation is successful.",
+		if pipelineRunList.Items[i].Name == pipelineTrigger.Status.GitRepository.LatestPipelineRun {
+			for _, c := range pipelineRunList.Items[i].Status.Conditions {
+				if v1.ConditionStatus(c.Status) == v1.ConditionTrue {
+					condition := v1.Condition{
+						Type:               apis.ReconcileSuccess,
+						LastTransitionTime: v1.Now(),
+						ObservedGeneration: pipelineTrigger.GetGeneration(),
+						Reason:             apis.ReconcileSuccessReason,
+						Status:             v1.ConditionTrue,
+						Message:            "Reconciliation is successful.",
+					}
+					pipelineTrigger.Status.GitRepository.AddOrReplaceCondition(condition)
+				} else if v1.ConditionStatus(c.Status) == v1.ConditionFalse {
+					condition := v1.Condition{
+						Type:               apis.ReconcileSuccess,
+						LastTransitionTime: v1.Now(),
+						ObservedGeneration: pipelineTrigger.GetGeneration(),
+						Reason:             c.Reason,
+						Status:             v1.ConditionFalse,
+						Message:            c.Message,
+					}
+					pipelineTrigger.Status.GitRepository.AddOrReplaceCondition(condition)
+				} else {
+					condition := v1.Condition{
+						Type:               apis.ReconcileInProgress,
+						LastTransitionTime: v1.Now(),
+						ObservedGeneration: pipelineTrigger.GetGeneration(),
+						Reason:             apis.ReconcileInProgress,
+						Status:             v1.ConditionUnknown,
+						Message:            "Progressing",
+					}
+					pipelineTrigger.Status.GitRepository.AddOrReplaceCondition(condition)
 				}
-				pipelineTrigger.Status.GitRepository.AddOrReplaceCondition(condition)
-			} else if v1.ConditionStatus(c.Status) == v1.ConditionFalse {
-				condition := v1.Condition{
-					Type:               apis.ReconcileSuccess,
-					LastTransitionTime: v1.Now(),
-					ObservedGeneration: pipelineTrigger.GetGeneration(),
-					Reason:             c.Reason,
-					Status:             v1.ConditionFalse,
-					Message:            c.Message,
-				}
-				pipelineTrigger.Status.GitRepository.AddOrReplaceCondition(condition)
-			} else {
-				condition := v1.Condition{
-					Type:               apis.ReconcileInProgress,
-					LastTransitionTime: v1.Now(),
-					ObservedGeneration: pipelineTrigger.GetGeneration(),
-					Reason:             apis.ReconcileInProgress,
-					Status:             v1.ConditionUnknown,
-					Message:            "Progressing",
-				}
-				pipelineTrigger.Status.GitRepository.AddOrReplaceCondition(condition)
 			}
 		}
 	}

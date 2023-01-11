@@ -23,4 +23,5 @@ type SourceSubscriber interface {
 	CalculateCurrentState(ctx context.Context, pipelineTrigger *pipelinev1alpha1.PipelineTrigger, client client.Client, pipelineRunList tektondevv1.PipelineRunList) bool
 	HasIntersection(map1 map[string]string, map2 map[string]string) bool
 	GetLastConditions(pipelineTrigger *pipelinev1alpha1.PipelineTrigger) ([]string, []metav1.Condition)
+	SetCurrentPipelineRunName(ctx context.Context, client client.Client, pipelineRun *tektondevv1.PipelineRun, pipelineRunName string, pipelineTrigger *pipelinev1alpha1.PipelineTrigger)
 }
