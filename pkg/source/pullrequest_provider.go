@@ -228,16 +228,31 @@ func (pullrequestSubscriber *PullrequestSubscriber) ManageError(context context.
 	return reconcile.Result{Requeue: true}, err
 }
 
+func (PullrequestSubscriber *PullrequestSubscriber) isStateIdentical(currentPipelineRun tektondevv1.PipelineRun, currentBranch pipelinev1alpha1.Branch) bool {
+	conditions := currentPipelineRun.Status.Conditions
+	for i := range conditions {
+		if (v1.ConditionStatus(conditions[i].Status) == v1.ConditionTrue) && (currentBranch.GetLastCondition().Status == v1.ConditionTrue) {
+			return true
+		}
+		if (v1.ConditionStatus(conditions[i].Status) == v1.ConditionFalse) && (currentBranch.GetLastCondition().Status == v1.ConditionFalse) {
+			return true
+		}
+	}
+	return false
+}
+
 func (pullrequestSubscriber *PullrequestSubscriber) SetCurrentPipelineRunStatus(pipelineRunList tektondevv1.PipelineRunList, pipelineTrigger *pipelinev1alpha1.PipelineTrigger) {
 	if len(pipelineTrigger.Status.Branches.Branches) > 0 {
 		for key := range pipelineTrigger.Status.Branches.Branches {
 			tempBranch := pipelineTrigger.Status.Branches.Branches[key]
-			tempBranchLabels := tempBranch.GenerateBranchLabelsAsHash()
+			//tempBranchLabels := tempBranch.GenerateBranchLabelsAsHash()
 			// This label is automatically added by the Tekton Controller
-			tempBranchLabels["tekton.dev/pipeline"] = pipelineTrigger.Spec.PipelineRunSpec.PipelineRef.Name
+			//tempBranchLabels["tekton.dev/pipeline"] = pipelineTrigger.Spec.PipelineRunSpec.PipelineRef.Name
 			for i := range pipelineRunList.Items {
-				if pullrequestSubscriber.HasIntersection(tempBranchLabels, pipelineRunList.Items[i].GetLabels()) {
-					if pipelineRunList.Items[i].Name == tempBranch.LatestPipelineRun {
+				//if pullrequestSubscriber.HasIntersection(tempBranchLabels, pipelineRunList.Items[i].GetLabels()) {
+				if pipelineRunList.Items[i].Name == tempBranch.LatestPipelineRun {
+					if !pullrequestSubscriber.isStateIdentical(pipelineRunList.Items[i], tempBranch) {
+						currBranch := tempBranch
 						for _, c := range pipelineRunList.Items[i].Status.Conditions {
 							if v1.ConditionStatus(c.Status) == v1.ConditionTrue {
 								condition := v1.Condition{
@@ -248,7 +263,8 @@ func (pullrequestSubscriber *PullrequestSubscriber) SetCurrentPipelineRunStatus(
 									Status:             v1.ConditionTrue,
 									Message:            "Reconciliation is successful.",
 								}
-								tempBranch.AddOrReplaceCondition(condition)
+								currBranch.AddOrReplaceCondition(condition)
+								pipelineTrigger.Status.Branches.Branches[key] = currBranch
 							} else if v1.ConditionStatus(c.Status) == v1.ConditionFalse {
 								condition := v1.Condition{
 									Type:               apis.ReconcileSuccess,
@@ -258,7 +274,8 @@ func (pullrequestSubscriber *PullrequestSubscriber) SetCurrentPipelineRunStatus(
 									Status:             v1.ConditionFalse,
 									Message:            c.Message,
 								}
-								tempBranch.AddOrReplaceCondition(condition)
+								currBranch.AddOrReplaceCondition(condition)
+								pipelineTrigger.Status.Branches.Branches[key] = currBranch
 							} else {
 								condition := v1.Condition{
 									Type:               apis.ReconcileInProgress,
@@ -268,12 +285,13 @@ func (pullrequestSubscriber *PullrequestSubscriber) SetCurrentPipelineRunStatus(
 									Status:             v1.ConditionUnknown,
 									Message:            "Progressing",
 								}
-								tempBranch.AddOrReplaceCondition(condition)
+								currBranch.AddOrReplaceCondition(condition)
+								pipelineTrigger.Status.Branches.Branches[key] = currBranch
 							}
 						}
 					}
-					pipelineTrigger.Status.Branches.Branches[key] = tempBranch
 				}
+				//}
 			}
 		}
 	}
