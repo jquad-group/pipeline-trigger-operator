@@ -67,7 +67,7 @@
           "datasource": "$datasource",
           "editorMode": "code",
           "exemplar": true,
-          "expr": "count(pipelinetrigger_reconcile_condition{type=\"Error\",status=\"False\",kind=~\"PipelineTrigger\"} == 1)",
+          "expr": "count(pipelinetrigger_reconcile_condition{type=\"Error\",status=\"False\",kind=~\"PipelineTrigger\",repo=~\".+\"} == 1)",
           "interval": "",
           "legendFormat": "",
           "range": true,
