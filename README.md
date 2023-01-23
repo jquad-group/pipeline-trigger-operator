@@ -1,10 +1,12 @@
 # Pipeline Trigger Operator
 
-The Pipeline Trigger Operator listens for events from the Flux v2 `ImagePolicy`, `GitRepository` or from the pullrequest-operator `PullRequest` resources and creates a Tekton `PipelineRun` for a given `Pipeline` resouce.
+The `Pipeline Trigger Operator` increases the level of automation of the build pipeline of a software component by enhancing it with reactive capabilities to react to events in the build environment.
+
+The `Pipeline Trigger Operator` runs on [Kubernetes](https://kubernetes.io/docs/home/) and integrates itself in the [GitOps operational framework](https://about.gitlab.com/topics/gitops/) to allow for automated creation of build pipelines. It does that by listening for events from the [Flux v2](https://fluxcd.io/flux/) `ImagePolicy` and `GitRepository` resources as well as from the [pullrequest-operator](https://github.com/jquad-group/pullrequest-operator/) `PullRequest` resource and reacts by creating a [Tekton](https://tekton.dev/docs/) `PipelineRun` for a given `Pipeline` resouce.
 
 **Automated creation of Tekton PipelineRuns on events from Flux resources**
 
-Using the automated pipeline trigger operator is based on the following resources:
+The use of the automated pipeline trigger operator is based on the following resources:
 1. `GitRepository` - [**Flux** resource](https://fluxcd.io/docs/components/source/gitrepositories/), configure as required
 2. `ImageRepository` - [**Flux** resource](https://fluxcd.io/docs/components/image/imagerepositories/), configure as required
 3. `ImagePolicy` - [**Flux** resource](https://fluxcd.io/docs/components/image/imagepolicies/), configure as required
