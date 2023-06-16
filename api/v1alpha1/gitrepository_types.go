@@ -13,7 +13,9 @@ const (
 	gitRepositoryNamePosition int    = 2
 	branchNamePosition        int    = 0
 	commitIdPosition          int    = 1
-	revisionDelimiter         string = "/"
+	repositoryNameDelimeter   string = "/"
+	revisionDelimiter         string = "@"
+	commitIdDelimeter         string = ":"
 )
 
 type GitRepository struct {
@@ -64,7 +66,7 @@ func (currentGitRepository *GitRepository) Equals(newGitRepository GitRepository
 }
 
 func getGitRepositoryName(fluxGitRepository sourcev1.GitRepository) string {
-	repositoryName := strings.Split(fluxGitRepository.Status.Artifact.Path, revisionDelimiter)[gitRepositoryNamePosition]
+	repositoryName := strings.Split(fluxGitRepository.Status.Artifact.Path, repositoryNameDelimeter)[gitRepositoryNamePosition]
 	return repositoryName
 }
 
@@ -74,7 +76,7 @@ func getBranchName(fluxGitRepository sourcev1.GitRepository) string {
 }
 
 func getCommitId(fluxGitRepository sourcev1.GitRepository) string {
-	commitId := strings.Split(fluxGitRepository.Status.Artifact.Revision, revisionDelimiter)[commitIdPosition]
+	commitId := strings.Split(fluxGitRepository.Status.Artifact.Revision, commitIdDelimeter)[commitIdPosition]
 	return commitId
 }
 

@@ -349,7 +349,7 @@ var _ = Describe("PipelineTrigger controller", FlakeAttempts(5), func() {
 					Checksum:       "cb0053b034ac7e74e2278b94b69db15871e9b3b40124adde8c585c1bdda48b25",
 					Path:           "gitrepository/flux-system/flux-system/dc0fd09d0915f47cbda5f235a8a9c30b2d8baa69.tar.gz",
 					URL:            "http://source-controller.flux-system.svc.cluster.local./gitrepository/flux-system/flux-system/dc0fd09d0915f47cbda5f235a8a9c30b2d8baa69.tar.gz",
-					Revision:       "main/dc0fd09d0915f47cbda5f235a8a9c30b2d8baa69",
+					Revision:       "main@sha1:dc0fd09d0915f47cbda5f235a8a9c30b2d8baa69",
 					LastUpdateTime: v1.Now(),
 				},
 				Conditions: []v1.Condition{
@@ -374,7 +374,7 @@ var _ = Describe("PipelineTrigger controller", FlakeAttempts(5), func() {
 					return "", err
 				}
 				return createdGitRepo.Status.Artifact.Revision, nil
-			}, duration, interval).Should(Equal("main/dc0fd09d0915f47cbda5f235a8a9c30b2d8baa69"))
+			}, duration, interval).Should(Equal("main@sha1:dc0fd09d0915f47cbda5f235a8a9c30b2d8baa69"))
 
 			By("Creating a PipelineTrigger, referencing an existing Pipeline and GitRepository")
 			Expect(k8sClient.Create(ctx, &pipelineTrigger1)).Should(Succeed())
@@ -505,7 +505,7 @@ var _ = Describe("PipelineTrigger controller", FlakeAttempts(5), func() {
 					Checksum:       "cb0053b034ac7e74e2278b94b69db15871e9b3b40124adde8c585c1bdda48b25",
 					Path:           "gitrepository/flux-system/flux-system/dc0fd09d0915f47cbda5f235a8a9c30b2d8baa69.tar.gz",
 					URL:            "http://source-controller.flux-system.svc.cluster.local./gitrepository/flux-system/flux-system/dc0fd09d0915f47cbda5f235a8a9c30b2d8baa69.tar.gz",
-					Revision:       "main/dc0fd09d0915f47cbda5f235a8a9c30b2d8baa69",
+					Revision:       "main@sha1:dc0fd09d0915f47cbda5f235a8a9c30b2d8baa69",
 					LastUpdateTime: v1.Now(),
 				},
 				Conditions: []v1.Condition{
@@ -530,7 +530,7 @@ var _ = Describe("PipelineTrigger controller", FlakeAttempts(5), func() {
 					return "", err
 				}
 				return createdGitRepo.Status.Artifact.Revision, nil
-			}, duration, interval).Should(Equal("main/dc0fd09d0915f47cbda5f235a8a9c30b2d8baa69"))
+			}, duration, interval).Should(Equal("main@sha1:dc0fd09d0915f47cbda5f235a8a9c30b2d8baa69"))
 
 			By("Creating a PipelineTrigger, referencing an existing Pipeline and GitRepository")
 			Expect(k8sClient.Create(ctx, &pipelineTrigger1)).Should(Succeed())

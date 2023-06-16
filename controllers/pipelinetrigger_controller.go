@@ -118,6 +118,10 @@ func (r *PipelineTriggerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		Force:        pointer.Bool(true),
 	}
 
+	subPatchOptions := &client.SubResourcePatchOptions{
+		PatchOptions: *patchOptions,
+	}
+
 	// check if the referenced source exists
 	sourceSubscriber := createSourceSubscriber(&pipelineTrigger)
 	if err := sourceSubscriber.Exists(ctx, pipelineTrigger, r.Client, req); err != nil {
@@ -155,7 +159,7 @@ func (r *PipelineTriggerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		}
 
 		patch.UnstructuredContent()["status"] = pipelineTrigger.Status
-		errStatus := r.Status().Patch(ctx, patch, client.Apply, patchOptions)
+		errStatus := r.Status().Patch(ctx, patch, client.Apply, subPatchOptions)
 		if errStatus != nil {
 			r.recorder.Event(&pipelineTrigger, core.EventTypeWarning, "Warning", errStatus.Error())
 		}
@@ -166,7 +170,7 @@ func (r *PipelineTriggerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 	patch.UnstructuredContent()["status"] = pipelineTrigger.Status
 	patch.SetManagedFields(nil)
-	errStatus := r.Status().Patch(ctx, patch, client.Apply, patchOptions)
+	errStatus := r.Status().Patch(ctx, patch, client.Apply, subPatchOptions)
 	if errStatus != nil {
 		r.recorder.Event(&pipelineTrigger, core.EventTypeWarning, "Warning", errStatus.Error())
 	}
