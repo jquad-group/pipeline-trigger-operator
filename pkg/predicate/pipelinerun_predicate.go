@@ -3,7 +3,7 @@ package predicate
 import (
 	"reflect"
 
-	tektondevv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
+	tektondevv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )

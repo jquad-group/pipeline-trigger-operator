@@ -33,12 +33,12 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	imagereflectorv1 "github.com/fluxcd/image-reflector-controller/api/v1beta1"
+	imagereflectorv1 "github.com/fluxcd/image-reflector-controller/api/v1beta2"
 	pipelinev1alpha1 "github.com/jquad-group/pipeline-trigger-operator/api/v1alpha1"
 	pullrequestv1alpha1 "github.com/jquad-group/pullrequest-operator/api/v1alpha1"
 
-	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
-	tektondevv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
+	sourcev1 "github.com/fluxcd/source-controller/api/v1"
+	tektondevv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	//+kubebuilder:scaffold:imports
 )
 

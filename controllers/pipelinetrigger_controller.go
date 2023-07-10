@@ -19,7 +19,7 @@ package controllers
 import (
 	"context"
 
-	imagereflectorv1 "github.com/fluxcd/image-reflector-controller/api/v1beta1"
+	imagereflectorv1 "github.com/fluxcd/image-reflector-controller/api/v1beta2"
 
 	"github.com/go-logr/logr"
 
@@ -39,16 +39,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 
-	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
+	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	pipelinev1alpha1 "github.com/jquad-group/pipeline-trigger-operator/api/v1alpha1"
 	pipelinev1alpha1predicate "github.com/jquad-group/pipeline-trigger-operator/pkg/predicate"
 
 	metricsApi "github.com/jquad-group/pipeline-trigger-operator/pkg/metrics"
 	sourceApi "github.com/jquad-group/pipeline-trigger-operator/pkg/source"
 	pullrequestv1alpha1 "github.com/jquad-group/pullrequest-operator/api/v1alpha1"
-	tektondevv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
+	tektondevv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 )
 
 const (
@@ -266,26 +265,23 @@ func (r *PipelineTriggerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&pipelinev1alpha1.PipelineTrigger{},
 			builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Watches(
-			&source.Kind{Type: &imagereflectorv1.ImagePolicy{}},
+			&imagereflectorv1.ImagePolicy{},
 			handler.EnqueueRequestsFromMapFunc(r.findObjectsForSource),
 			builder.WithPredicates(predicate.ResourceVersionChangedPredicate{}),
 		).
 		Watches(
-			&source.Kind{Type: &sourcev1.GitRepository{}},
+			&sourcev1.GitRepository{},
 			handler.EnqueueRequestsFromMapFunc(r.findObjectsForSource),
 			builder.WithPredicates(pipelinev1alpha1predicate.SourceRevisionChangePredicate{}),
 		).
 		Watches(
-			&source.Kind{Type: &pullrequestv1alpha1.PullRequest{}},
+			&pullrequestv1alpha1.PullRequest{},
 			handler.EnqueueRequestsFromMapFunc(r.findObjectsForSource),
 			builder.WithPredicates(pipelinev1alpha1predicate.PullRequestStatusChangePredicate{}),
 		).
 		Watches(
-			&source.Kind{Type: &tektondevv1.PipelineRun{}},
-			&handler.EnqueueRequestForOwner{
-				IsController: true,
-				OwnerType:    &pipelinev1alpha1.PipelineTrigger{},
-			},
+			&tektondevv1.PipelineRun{},
+			handler.EnqueueRequestForOwner(mgr.GetScheme(), mgr.GetRESTMapper(), &pipelinev1alpha1.PipelineTrigger{}, handler.OnlyControllerOwner()),
 			builder.WithPredicates(pipelinev1alpha1predicate.StatusChangePredicate{}),
 		).
 		Complete(r)
@@ -300,7 +296,7 @@ When the list of `PipelineTriggers` that reference the `ImagePolicy`,`GitReposit
 we just need to loop through the list and create a reconcile request for each one.
 If an error occurs fetching the list, or no `PipelineTriggers` are found, then no reconcile requests will be returned.
 */
-func (r *PipelineTriggerReconciler) findObjectsForSource(source client.Object) []reconcile.Request {
+func (r *PipelineTriggerReconciler) findObjectsForSource(ctx context.Context, source client.Object) []reconcile.Request {
 	attachedPipelineTriggers := &pipelinev1alpha1.PipelineTriggerList{}
 	listOps := &client.ListOptions{
 		FieldSelector: fields.OneTermEqualSelector(sourceField, source.GetName()),
