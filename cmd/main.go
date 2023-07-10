@@ -30,7 +30,7 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
 	pipelinev1alpha1 "github.com/jquad-group/pipeline-trigger-operator/api/v1alpha1"
-	"github.com/jquad-group/pipeline-trigger-operator/controllers"
+	controllers "github.com/jquad-group/pipeline-trigger-operator/internal/controller"
 	metricsApi "github.com/jquad-group/pipeline-trigger-operator/pkg/metrics"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
