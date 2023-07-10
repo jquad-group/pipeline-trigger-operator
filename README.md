@@ -1,5 +1,7 @@
 # Pipeline Trigger Operator
 
+[![Go Report Card](https://goreportcard.com/badge/jquad-group/pipeline-trigger-operator)](https://goreportcard.com/report/jquad-group/pipeline-trigger-operator)
+
 The `Pipeline Trigger Operator` increases the level of automation of the build pipeline of a software component by enhancing it with reactive capabilities to react to events in the build environment.
 
 The `Pipeline Trigger Operator` runs on [Kubernetes](https://kubernetes.io/docs/home/) and integrates itself in the [GitOps operational framework](https://about.gitlab.com/topics/gitops/) to allow for automated creation of build pipelines. It does that by listening for events from the [Flux v2](https://fluxcd.io/flux/) `ImagePolicy` and `GitRepository` resources as well as from the [pullrequest-operator](https://github.com/jquad-group/pullrequest-operator/) `PullRequest` resource and reacts by creating a [Tekton](https://tekton.dev/docs/) `PipelineRun` for a given `Pipeline` resouce.
