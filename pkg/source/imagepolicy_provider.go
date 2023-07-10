@@ -4,11 +4,11 @@ import (
 	"context"
 	"strings"
 
-	imagereflectorv1 "github.com/fluxcd/image-reflector-controller/api/v1beta1"
+	imagereflectorv1 "github.com/fluxcd/image-reflector-controller/api/v1beta2"
 	pipelinev1alpha1 "github.com/jquad-group/pipeline-trigger-operator/api/v1alpha1"
 	"github.com/jquad-group/pipeline-trigger-operator/pkg/json"
 	apis "github.com/jquad-group/pipeline-trigger-operator/pkg/status"
-	tektondevv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
+	tektondevv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"

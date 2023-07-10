@@ -20,14 +20,14 @@ import (
 	"fmt"
 	"time"
 
-	imagereflectorv1 "github.com/fluxcd/image-reflector-controller/api/v1beta1"
+	imagereflectorv1 "github.com/fluxcd/image-reflector-controller/api/v1beta2"
 	"github.com/fluxcd/pkg/apis/meta"
-	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
+	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	opstatus "github.com/jquad-group/pipeline-trigger-operator/pkg/status"
 	pullrequestv1alpha1 "github.com/jquad-group/pullrequest-operator/api/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	tektondevv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
+	tektondevv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -181,7 +181,7 @@ var _ = Describe("PipelineTrigger controller", FlakeAttempts(5), func() {
 					Params: []tektondevv1.Param{
 						{
 							Name: "test",
-							Value: tektondevv1.ArrayOrString{
+							Value: tektondevv1.ParamValue{
 								Type:      tektondevv1.ParamTypeString,
 								StringVal: "test",
 							},
@@ -212,7 +212,7 @@ var _ = Describe("PipelineTrigger controller", FlakeAttempts(5), func() {
 					Params: []tektondevv1.Param{
 						{
 							Name: "test",
-							Value: tektondevv1.ArrayOrString{
+							Value: tektondevv1.ParamValue{
 								Type:      tektondevv1.ParamTypeString,
 								StringVal: "test",
 							},
@@ -243,7 +243,7 @@ var _ = Describe("PipelineTrigger controller", FlakeAttempts(5), func() {
 					Params: []tektondevv1.Param{
 						{
 							Name: "test",
-							Value: tektondevv1.ArrayOrString{
+							Value: tektondevv1.ParamValue{
 								Type:      tektondevv1.ParamTypeString,
 								StringVal: "test",
 							},
@@ -274,7 +274,7 @@ var _ = Describe("PipelineTrigger controller", FlakeAttempts(5), func() {
 					Params: []tektondevv1.Param{
 						{
 							Name: "test",
-							Value: tektondevv1.ArrayOrString{
+							Value: tektondevv1.ParamValue{
 								Type:      tektondevv1.ParamTypeString,
 								StringVal: "test",
 							},
@@ -346,7 +346,6 @@ var _ = Describe("PipelineTrigger controller", FlakeAttempts(5), func() {
 			By("Updating the GitRepository status")
 			gitRepoStatus := sourcev1.GitRepositoryStatus{
 				Artifact: &sourcev1.Artifact{
-					Checksum:       "cb0053b034ac7e74e2278b94b69db15871e9b3b40124adde8c585c1bdda48b25",
 					Path:           "gitrepository/flux-system/flux-system/dc0fd09d0915f47cbda5f235a8a9c30b2d8baa69.tar.gz",
 					URL:            "http://source-controller.flux-system.svc.cluster.local./gitrepository/flux-system/flux-system/dc0fd09d0915f47cbda5f235a8a9c30b2d8baa69.tar.gz",
 					Revision:       "main@sha1:dc0fd09d0915f47cbda5f235a8a9c30b2d8baa69",
@@ -502,7 +501,6 @@ var _ = Describe("PipelineTrigger controller", FlakeAttempts(5), func() {
 			By("Updating the GitRepository status")
 			gitRepoStatus := sourcev1.GitRepositoryStatus{
 				Artifact: &sourcev1.Artifact{
-					Checksum:       "cb0053b034ac7e74e2278b94b69db15871e9b3b40124adde8c585c1bdda48b25",
 					Path:           "gitrepository/flux-system/flux-system/dc0fd09d0915f47cbda5f235a8a9c30b2d8baa69.tar.gz",
 					URL:            "http://source-controller.flux-system.svc.cluster.local./gitrepository/flux-system/flux-system/dc0fd09d0915f47cbda5f235a8a9c30b2d8baa69.tar.gz",
 					Revision:       "main@sha1:dc0fd09d0915f47cbda5f235a8a9c30b2d8baa69",

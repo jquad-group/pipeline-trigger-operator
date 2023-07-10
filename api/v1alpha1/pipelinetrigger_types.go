@@ -25,7 +25,7 @@ import (
 	"github.com/jquad-group/pipeline-trigger-operator/pkg/json"
 
 	"github.com/jquad-group/pipeline-trigger-operator/pkg/meta"
-	tektondevv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
+	tektondevv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -159,7 +159,7 @@ func (pipelineTrigger *PipelineTrigger) createParams(details string) []tektondev
 }
 
 func (pipelineTrigger *PipelineTrigger) CreatePipelineRunResourceForBranch(currentBranch Branch, labels map[string]string) *tektondevv1.PipelineRun {
-	pipelineRunTypeMeta := meta.TypeMeta("PipelineRun", "tekton.dev/v1beta1")
+	pipelineRunTypeMeta := meta.TypeMeta("PipelineRun", "tekton.dev/v1")
 	pipelineTrigger.Spec.PipelineRunSpec.Params = pipelineTrigger.createParams(currentBranch.Details)
 	pr := &tektondevv1.PipelineRun{
 		TypeMeta: pipelineRunTypeMeta,
@@ -175,7 +175,7 @@ func (pipelineTrigger *PipelineTrigger) CreatePipelineRunResourceForBranch(curre
 }
 
 func (pipelineTrigger *PipelineTrigger) CreatePipelineRunResource() *tektondevv1.PipelineRun {
-	pipelineRunTypeMeta := meta.TypeMeta("PipelineRun", "tekton.dev/v1beta1")
+	pipelineRunTypeMeta := meta.TypeMeta("PipelineRun", "tekton.dev/v1")
 	var pipelineRunLabels map[string]string
 	var pipelineRunName string
 
@@ -222,7 +222,7 @@ func createParam(inputParam tektondevv1.Param, details string) tektondevv1.Param
 		res, _ := json.EvalExpr(details, inputParam.Value.StringVal)
 		return tektondevv1.Param{
 			Name: inputParam.Name,
-			Value: tektondevv1.ArrayOrString{
+			Value: tektondevv1.ParamValue{
 				Type:      tektondevv1.ParamTypeString,
 				StringVal: trimQuotes(res),
 			},

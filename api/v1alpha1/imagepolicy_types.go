@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	imagereflectorv1 "github.com/fluxcd/image-reflector-controller/api/v1beta1"
+	imagereflectorv1 "github.com/fluxcd/image-reflector-controller/api/v1beta2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 

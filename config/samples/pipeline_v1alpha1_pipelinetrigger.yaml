@@ -1,77 +1,12 @@
 apiVersion: pipeline.jquad.rocks/v1alpha1
 kind: PipelineTrigger
 metadata:
-  name: pipelinetrigger-for-git
-  namespace: ly-operator-try
+  labels:
+    app.kubernetes.io/name: pipelinetrigger
+    app.kubernetes.io/instance: pipelinetrigger-sample
+    app.kubernetes.io/part-of: migrated-project
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/created-by: migrated-project
+  name: pipelinetrigger-sample
 spec:
-  source: 
-    kind: GitRepository
-    name: microservice-code-repo
-  pipeline: 
-    name: ly-build-and-push-try
-    serviceAccountName: default
-    maxHistory: 5
-    retries: 2 # if the first pipeline fails, retry another 2 times
-    workspace:
-      name: workspace
-      size: 1Gi
-      accessMode: ReadWriteOnce
-    inputParams:
-      - name: "repo-url"
-        value: "git@github.com:jquad-group/www-jquad.git"
-      - name: "branch-name"
-        value: "main"
-      - name: "projectname"
-        value: "www-jquad"
-      - name: "repositoryName"
-        value: "www-jquad"
-      - name: "imageTag"
-        value: "0.0.5"
-      - name: "commit"
-        value: ""
-      - name: "imageLocation"
-        value: "harbor.jquad.rocks/library"
-      - name: "pathToDockerFile"
-        value: "/workspace/repo"
-      - name: "pathToContext"
-        value: "/workspace/repo/Dockerfile"
-  # Add fields here
----
-apiVersion: pipeline.jquad.rocks/v1alpha1
-kind: PipelineTrigger
-metadata:
-  name: pipelinetrigger-for-image
-  namespace: ly-operator-try
-spec:
-  source: 
-    kind: ImagePolicy
-    name: latest-image-notifier
-  pipeline: 
-    name: ly-build-and-push-try
-    serviceAccountName: default
-    maxHistory: 3
-    retries: 2 # if the first pipeline fails, retry another 2 times
-    workspace:
-      name: workspace
-      size: 1Gi
-      accessMode: ReadWriteOnce
-    inputParams:
-      - name: "repo-url"
-        value: "git@github.com:jquad-group/www-jquad.git"
-      - name: "branch-name"
-        value: "main"
-      - name: "projectname"
-        value: "www-jquad"
-      - name: "repositoryName"
-        value: "www-jquad"
-      - name: "imageTag"
-        value: "0.0.5"
-      - name: "commit"
-        value: ""
-      - name: "imageLocation"
-        value: "harbor.jquad.rocks/library"
-      - name: "pathToDockerFile"
-        value: "/workspace/repo"
-      - name: "pathToContext"
-        value: "/workspace/repo/Dockerfile"
-  # Add fields here
+  # TODO(user): Add fields here
