@@ -6,8 +6,8 @@ metadata:
     app.kubernetes.io/name: clusterrole
     app.kubernetes.io/instance: pipelinetrigger-editor-role
     app.kubernetes.io/component: rbac
-    app.kubernetes.io/created-by: migrated-project
-    app.kubernetes.io/part-of: migrated-project
+    app.kubernetes.io/created-by: pipeline-trigger-operator
+    app.kubernetes.io/part-of: pipeline-trigger-operator
     app.kubernetes.io/managed-by: kustomize
   name: pipelinetrigger-editor-role
 rules:

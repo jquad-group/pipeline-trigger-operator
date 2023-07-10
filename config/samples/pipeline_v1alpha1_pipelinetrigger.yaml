@@ -4,9 +4,9 @@ metadata:
   labels:
     app.kubernetes.io/name: pipelinetrigger
     app.kubernetes.io/instance: pipelinetrigger-sample
-    app.kubernetes.io/part-of: migrated-project
+    app.kubernetes.io/part-of: pipeline-trigger-operator
     app.kubernetes.io/managed-by: kustomize
-    app.kubernetes.io/created-by: migrated-project
+    app.kubernetes.io/created-by: pipeline-trigger-operator
   name: pipelinetrigger-sample
 spec:
   # TODO(user): Add fields here
