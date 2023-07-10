@@ -1,6 +1,7 @@
 # Pipeline Trigger Operator
 
 [![Go Report Card](https://goreportcard.com/badge/jquad-group/pipeline-trigger-operator)](https://goreportcard.com/report/jquad-group/pipeline-trigger-operator)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/jquad-group/pipeline-trigger-operator/blob/main/LICENSE)
 
 The `Pipeline Trigger Operator` increases the level of automation of the build pipeline of a software component by enhancing it with reactive capabilities to react to events in the build environment.
 
