@@ -57,6 +57,11 @@ type PipelineTriggerSpec struct {
 	// +kubebuilder:validation:Required
 	Source Source `json:"source"`
 
+	// The API Version of the tekton.dev PipelineRun object, e.g. tekton.dev/v1beta1
+	// +kubebuilder:validation:Enum=tekton.dev/v1beta1;tekton.dev/v1
+	// +kubebuilder:validation:Optional
+	TektonPipelineRunApiVersion string `json:"tektonApiVersion,omitempty"`
+
 	// +kubebuilder:validation:Schemaless
 	// +kubebuilder:pruning:PreserveUnknownFields
 	PipelineRunSpec tektondevv1.PipelineRunSpec `json:"pipelineRunSpec"`
@@ -159,7 +164,12 @@ func (pipelineTrigger *PipelineTrigger) createParams(details string) []tektondev
 }
 
 func (pipelineTrigger *PipelineTrigger) CreatePipelineRunResourceForBranch(currentBranch Branch, labels map[string]string) *tektondevv1.PipelineRun {
-	pipelineRunTypeMeta := meta.TypeMeta("PipelineRun", "tekton.dev/v1")
+	var pipelineRunTypeMeta metav1.TypeMeta
+	if len(pipelineTrigger.Spec.TektonPipelineRunApiVersion) > 0 {
+		pipelineRunTypeMeta = meta.TypeMeta("PipelineRun", pipelineTrigger.Spec.TektonPipelineRunApiVersion)
+	} else {
+		pipelineRunTypeMeta = meta.TypeMeta("PipelineRun", "tekton.dev/v1beta1")
+	}
 	pipelineTrigger.Spec.PipelineRunSpec.Params = pipelineTrigger.createParams(currentBranch.Details)
 	pr := &tektondevv1.PipelineRun{
 		TypeMeta: pipelineRunTypeMeta,
@@ -175,7 +185,12 @@ func (pipelineTrigger *PipelineTrigger) CreatePipelineRunResourceForBranch(curre
 }
 
 func (pipelineTrigger *PipelineTrigger) CreatePipelineRunResource() *tektondevv1.PipelineRun {
-	pipelineRunTypeMeta := meta.TypeMeta("PipelineRun", "tekton.dev/v1")
+	var pipelineRunTypeMeta metav1.TypeMeta
+	if len(pipelineTrigger.Spec.TektonPipelineRunApiVersion) > 0 {
+		pipelineRunTypeMeta = meta.TypeMeta("PipelineRun", pipelineTrigger.Spec.TektonPipelineRunApiVersion)
+	} else {
+		pipelineRunTypeMeta = meta.TypeMeta("PipelineRun", "tekton.dev/v1beta1")
+	}
 	var pipelineRunLabels map[string]string
 	var pipelineRunName string
 

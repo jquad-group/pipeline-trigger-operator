@@ -35,8 +35,10 @@ spec:
   source: 
     kind: ImagePolicy
     name: latest-image-notifier
+  # This can be either tekton.dev/v1beta1 or tekton.dev/v1, if omitted uses tekton.dev/v1beta1
+  tektonApiVersion: tekton.dev/v1beta1
   # The PipelineRunSpec of Tekton
-  # See the Tekton API: https://tekton.dev/docs/pipelines/pipeline-api/#tekton.dev/v1beta1.PipelineRun 
+  # See the Tekton API: https://tekton.dev/docs/pipelines/pipeline-api/#tekton.dev/v1beta1.PipelineRun or https://tekton.dev/docs/pipelines/pipeline-api/#tekton.dev/v1.PipelineRun
   pipelineRunSpec: 
     # The name of Pipeline that is used for the creation of the PipelineRun resources
     pipelineRef:

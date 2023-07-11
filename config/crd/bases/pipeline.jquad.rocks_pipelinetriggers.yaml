@@ -56,6 +56,13 @@ spec:
                 - kind
                 - name
                 type: object
+              tektonApiVersion:
+                description: The API Version of the tekton.dev PipelineRun object,
+                  e.g. tekton.dev/v1beta1
+                enum:
+                - tekton.dev/v1beta1
+                - tekton.dev/v1
+                type: string
             required:
             - pipelineRunSpec
             - source
