@@ -62,10 +62,13 @@ const (
 // PipelineTriggerReconciler reconciles a PipelineTrigger object
 type PipelineTriggerReconciler struct {
 	client.Client
-	Log             logr.Logger
-	Scheme          *runtime.Scheme
-	recorder        record.EventRecorder
-	MetricsRecorder *metricsApi.Recorder
+	Log                      logr.Logger
+	Scheme                   *runtime.Scheme
+	recorder                 record.EventRecorder
+	MetricsRecorder          *metricsApi.Recorder
+	SecondClusterEnabled     bool
+	SecondClusterAddr        string
+	SecondClusterBearerToken string
 }
 
 // +kubebuilder:docs-gen:collapse=Reconciler Declaration
@@ -140,7 +143,17 @@ func (r *PipelineTriggerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		log.Error(errList, "Failed to list PipelineRuns in ", pipelineTrigger.Namespace, " with label ", pipelineTrigger.Name)
 	}
 
-	if !sourceSubscriber.CalculateCurrentState(ctx, &pipelineTrigger, r.Client, pipelineRunList) {
+	running, runninOnSecondCluster, err := sourceSubscriber.CalculateCurrentState(r.SecondClusterEnabled, r.SecondClusterAddr, r.SecondClusterBearerToken, ctx, &pipelineTrigger, r.Client, pipelineRunList)
+	if err != nil {
+		log.Error(err, "Second cluster is enabled, but the controller cannot connect to it ", pipelineTrigger.Namespace)
+	}
+
+	if runninOnSecondCluster {
+		newVersionMsg := "Pipeline is running on the second cluster in namespace " + pipelineTrigger.Namespace
+		r.recorder.Event(&pipelineTrigger, core.EventTypeNormal, "Info", newVersionMsg)
+	}
+
+	if !running && !runninOnSecondCluster {
 
 		// Get the Latest Source Event
 		_, err := sourceSubscriber.GetLatestEvent(ctx, &pipelineTrigger, r.Client, req)

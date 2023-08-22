@@ -4,7 +4,10 @@ import (
 	"context"
 	"strings"
 
+	encodingJson "encoding/json"
+
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
+
 	pipelinev1alpha1 "github.com/jquad-group/pipeline-trigger-operator/api/v1alpha1"
 	"github.com/jquad-group/pipeline-trigger-operator/pkg/json"
 	apis "github.com/jquad-group/pipeline-trigger-operator/pkg/status"
@@ -12,6 +15,8 @@ import (
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -38,10 +43,10 @@ func (gitrepositorySubscriber GitrepositorySubscriber) Exists(ctx context.Contex
 	}
 }
 
-func (gitrepositorySubscriber GitrepositorySubscriber) CalculateCurrentState(ctx context.Context, pipelineTrigger *pipelinev1alpha1.PipelineTrigger, client client.Client, pipelineRunList tektondevv1.PipelineRunList) bool {
+func (gitrepositorySubscriber GitrepositorySubscriber) CalculateCurrentState(secondClusterEnabled bool, secondClusterAddr string, secondClusterBearerToken string, ctx context.Context, pipelineTrigger *pipelinev1alpha1.PipelineTrigger, client client.Client, pipelineRunList tektondevv1.PipelineRunList) (bool, bool, error) {
 	foundSource := &sourcev1.GitRepository{}
 	if err := client.Get(ctx, types.NamespacedName{Name: pipelineTrigger.Spec.Source.Name, Namespace: pipelineTrigger.Namespace}, foundSource); err != nil {
-		return false
+		return false, false, err
 	}
 	var gitRepository pipelinev1alpha1.GitRepository
 	gitRepository.GetGitRepository(*foundSource)
@@ -50,10 +55,39 @@ func (gitrepositorySubscriber GitrepositorySubscriber) CalculateCurrentState(ctx
 	gitRepositoryLabels["tekton.dev/pipeline"] = pipelineTrigger.Spec.PipelineRunSpec.PipelineRef.Name
 	for i := range pipelineRunList.Items {
 		if gitrepositorySubscriber.HasIntersection(gitRepositoryLabels, pipelineRunList.Items[i].GetLabels()) {
-			return true
+			return true, false, nil
 		}
 	}
-	return false
+
+	if secondClusterEnabled {
+		myConfig := rest.Config{
+			Host:            secondClusterAddr,
+			APIPath:         "/",
+			BearerToken:     secondClusterBearerToken,
+			TLSClientConfig: rest.TLSClientConfig{Insecure: true},
+		}
+
+		myClientSet, err := kubernetes.NewForConfig(&myConfig)
+		if err != nil {
+			return false, false, err
+		}
+
+		pRListExternal := &tektondevv1.PipelineRunList{}
+		pipelineRunListExternal, err := myClientSet.RESTClient().Get().AbsPath("/apis/tekton.dev/v1").Namespace(pipelineTrigger.Namespace).Resource("pipelineruns").DoRaw(context.TODO())
+		if err != nil {
+			return false, false, err
+		}
+		if err := encodingJson.Unmarshal(pipelineRunListExternal, &pRListExternal); err != nil {
+			return false, false, err
+		}
+
+		for i := range pRListExternal.Items {
+			if gitrepositorySubscriber.HasIntersection(gitRepositoryLabels, pRListExternal.Items[i].GetLabels()) {
+				return false, true, nil
+			}
+		}
+	}
+	return false, false, nil
 }
 
 func (gitrepositorySubscriber GitrepositorySubscriber) GetLatestEvent(ctx context.Context, pipelineTrigger *pipelinev1alpha1.PipelineTrigger, client client.Client, req ctrl.Request) (bool, error) {

@@ -5,6 +5,10 @@ import (
 	"context"
 	"strings"
 
+	encodingJson "encoding/json"
+
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	pipelinev1alpha1 "github.com/jquad-group/pipeline-trigger-operator/api/v1alpha1"
@@ -21,6 +25,14 @@ import (
 )
 
 type PullrequestSubscriber struct {
+}
+
+type PullRequestResult struct {
+	BranchName           string
+	BranchCommit         string
+	Running              bool
+	SecondClusterRunning bool
+	Error                error
 }
 
 func NewPullrequestSubscriber() *PullrequestSubscriber {
@@ -41,12 +53,13 @@ func (pullrequestSubscriber PullrequestSubscriber) Exists(ctx context.Context, p
 	}
 }
 
-func (pullrequestSubscriber PullrequestSubscriber) CalculateCurrentState(ctx context.Context, pipelineTrigger *pipelinev1alpha1.PipelineTrigger, client client.Client, pipelineRunList tektondevv1.PipelineRunList) bool {
+func (pullrequestSubscriber PullrequestSubscriber) CalculateCurrentState(secondClusterEnabled bool, secondClusterAddr string, secondClusterBearerToken string, ctx context.Context, pipelineTrigger *pipelinev1alpha1.PipelineTrigger, client client.Client, pipelineRunList tektondevv1.PipelineRunList) (bool, bool, error) {
 	var res []bool
+	var resExternal []bool
 	// get the current branches from the pull request resource
 	foundSource := &pullrequestv1alpha1.PullRequest{}
 	if err := client.Get(ctx, types.NamespacedName{Name: pipelineTrigger.Spec.Source.Name, Namespace: pipelineTrigger.Namespace}, foundSource); err != nil {
-		return false
+		return false, false, err
 	}
 	var branches pipelinev1alpha1.Branches
 	branches.GetPrBranches(foundSource.Status.SourceBranches)
@@ -66,10 +79,48 @@ func (pullrequestSubscriber PullrequestSubscriber) CalculateCurrentState(ctx con
 	}
 
 	if len(res) < len(branches.Branches) {
-		return false
-	} else {
-		return true
+		if secondClusterEnabled {
+			pRListExternal := &tektondevv1.PipelineRunList{}
+
+			myConfig := rest.Config{
+				Host:            secondClusterAddr,
+				APIPath:         "/",
+				BearerToken:     secondClusterBearerToken,
+				TLSClientConfig: rest.TLSClientConfig{Insecure: true},
+			}
+
+			myClientSet, err := kubernetes.NewForConfig(&myConfig)
+			if err != nil {
+				return false, false, err
+			}
+
+			pipelineRunListExternal, err := myClientSet.RESTClient().Get().AbsPath("/apis/tekton.dev/v1").Namespace(pipelineTrigger.Namespace).Resource("pipelineruns").DoRaw(context.TODO())
+			if err != nil {
+				return false, false, err
+			}
+			if err := encodingJson.Unmarshal(pipelineRunListExternal, &pRListExternal); err != nil {
+				return false, false, err
+			}
+			// check if there is a corresponding pipelinerun for every checkout branch
+			if len(branches.Branches) > 0 {
+				for key := range branches.Branches {
+					tempBranch := branches.Branches[key]
+					tempBranchLabels := tempBranch.GenerateBranchLabelsAsHash()
+					tempBranchLabels["tekton.dev/pipeline"] = pipelineTrigger.Spec.PipelineRunSpec.PipelineRef.Name
+					for i := range pRListExternal.Items {
+						if pullrequestSubscriber.HasIntersection(tempBranchLabels, pRListExternal.Items[i].GetLabels()) {
+							resExternal = append(resExternal, true)
+						}
+					}
+				}
+			}
+			if len(resExternal) >= len(branches.Branches) {
+				return false, true, nil
+			}
+		}
 	}
+
+	return false, false, nil
 
 }
 

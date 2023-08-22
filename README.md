@@ -68,26 +68,31 @@ spec:
 
 ## Using dynamic input parameters for the pipeline
 
-The pipeline-trigger-operator accepts json path expressions. 
+The pipeline-trigger-operator accepts json path expressions. This means that the Response body of the Github/Bitbucket can be extracted and used dynamically in a pipeline. 
 
-E.g. given the following status:
+1. Starting a PipelineRun on events from PullRequest
 
+E.g. for the following Github response 
 ```
-Status:
-  Branches:
-  Git Repository:
-    Branch Name:  main
-    Commit Id:    03da4fdbf8f3e027fb56dd0d96244c951a24f2b4
-    Details:                 {"branchName":"main","commitId":"03da4fdbf8f3e027fb56dd0d96244c951a24f2b4","repositoryName":"microservice-code-repo"}
-    Repository Name:         microservice-code-repo
+{"id":1431803478,"number":8,"state":"open","locked":false,"title":"simple pr","created_at":"2023-07-12T18:37:32Z"}
 ```
-the branch name can be extracted from the `Details` using the expression `$.branchName` as a input parameter for the pipeline:
-
+one can use the following expression in a PipelineTrigger, in order to extract the `title`:
 ```
     params:
-    - name: "branch-name"
-      value: $.branchName
+    - name: "pullrequest-title"
+      value: $.title
 ```
+
+The whole Github/Bitbucket response can be seen, by using `kubectl describe pullrequest`.
+
+
+2. Starting PipelineRun on events from GitRepository
+
+The following json expressions can be used in the arguments of a PipelineRun:
+
+`$.branchName` - the current branch name
+`$.branchId` - the current commit id
+`$.repositoryName` - the current repository name
 
 # Prerequisites 
 
@@ -128,32 +133,20 @@ Then you can import the dashboard in Grafana from `config/dashboard/dashboard.js
 ![Dashboard](https://github.com/jquad-group/pipeline-trigger-operator/blob/main/img/dashboard.png)
 
 
-# Cross Data Center Distribution Lock
+# Two cluster setup
 
-If you deploy the operator in a multi cluster setup, but only of them must be working at a time, the argument `--cross-ds-leader-elect` should be added in the `Deployment`:
+If you deploy the operator in a two cluster setup, and you want to distribute the pipelines round-robin between the clusters, use the following arguments in the Controller `Deployment`: 
 
 ```
-    spec:
       containers:
-      - args:
+      - name: manager
+        command:
+        - /manager
+        args:
         - --leader-elect
-        - --cross-dc-leader-elect
-```
-
-In order for the cross datacenter leader election to work a MySQL backend is needed. The configuration for the backend can be set via enviroment variables or via `Secrets` or `ConfigMaps`:
-
-```
-        env:
-          - name: username
-            value: "root" 
-          - name: password
-            value: "mypassword"            
-          - name: address
-            value: "mysql.cluster:3306"
-          - name: plaintext_connection_allowed
-            value: "true"
-          - name: ha_enabled
-            value: "true"            
+        - --second-cluster
+        - --second-cluster-address=xxx
+        - --second-cluster-bearer-token=xxx     
 ```
 
 # Usage

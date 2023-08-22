@@ -4,6 +4,8 @@ import (
 	"context"
 	"strings"
 
+	encodingJson "encoding/json"
+
 	imagereflectorv1 "github.com/fluxcd/image-reflector-controller/api/v1beta2"
 	pipelinev1alpha1 "github.com/jquad-group/pipeline-trigger-operator/api/v1alpha1"
 	"github.com/jquad-group/pipeline-trigger-operator/pkg/json"
@@ -12,6 +14,8 @@ import (
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -38,11 +42,11 @@ func (imagepolicySubscriber ImagepolicySubscriber) Exists(ctx context.Context, p
 	}
 }
 
-func (imagepolicySubscriber ImagepolicySubscriber) CalculateCurrentState(ctx context.Context, pipelineTrigger *pipelinev1alpha1.PipelineTrigger, client client.Client, pipelineRunList tektondevv1.PipelineRunList) bool {
+func (imagepolicySubscriber ImagepolicySubscriber) CalculateCurrentState(secondClusterEnabled bool, secondClusterAddr string, secondClusterBearerToken string, ctx context.Context, pipelineTrigger *pipelinev1alpha1.PipelineTrigger, client client.Client, pipelineRunList tektondevv1.PipelineRunList) (bool, bool, error) {
 	// get the current image policy from the Flux ImagePolicy resource
 	foundSource := &imagereflectorv1.ImagePolicy{}
 	if err := client.Get(ctx, types.NamespacedName{Name: pipelineTrigger.Spec.Source.Name, Namespace: pipelineTrigger.Namespace}, foundSource); err != nil {
-		return false
+		return false, false, err
 	}
 	var imagePolicy pipelinev1alpha1.ImagePolicy
 	imagePolicy.GetImagePolicy(*foundSource)
@@ -51,11 +55,39 @@ func (imagepolicySubscriber ImagepolicySubscriber) CalculateCurrentState(ctx con
 	imagePolicyLabels["tekton.dev/pipeline"] = pipelineTrigger.Spec.PipelineRunSpec.PipelineRef.Name
 	for i := range pipelineRunList.Items {
 		if imagepolicySubscriber.HasIntersection(imagePolicyLabels, pipelineRunList.Items[i].GetLabels()) {
-			return true
+			return true, false, nil
 		}
 	}
 
-	return false
+	if secondClusterEnabled {
+		myConfig := rest.Config{
+			Host:            secondClusterAddr,
+			APIPath:         "/",
+			BearerToken:     secondClusterBearerToken,
+			TLSClientConfig: rest.TLSClientConfig{Insecure: true},
+		}
+
+		myClientSet, err := kubernetes.NewForConfig(&myConfig)
+		if err != nil {
+			return false, false, err
+		}
+
+		pRListExternal := &tektondevv1.PipelineRunList{}
+		pipelineRunListExternal, err := myClientSet.RESTClient().Get().AbsPath("/apis/tekton.dev/v1").Namespace(pipelineTrigger.Namespace).Resource("pipelineruns").DoRaw(context.TODO())
+		if err != nil {
+			return false, false, err
+		}
+		if err := encodingJson.Unmarshal(pipelineRunListExternal, &pRListExternal); err != nil {
+			return false, false, err
+		}
+
+		for i := range pRListExternal.Items {
+			if imagepolicySubscriber.HasIntersection(imagePolicyLabels, pRListExternal.Items[i].GetLabels()) {
+				return false, true, nil
+			}
+		}
+	}
+	return false, false, nil
 }
 
 func (imagepolicySubscriber ImagepolicySubscriber) GetLatestEvent(ctx context.Context, pipelineTrigger *pipelinev1alpha1.PipelineTrigger, client client.Client, req ctrl.Request) (bool, error) {
