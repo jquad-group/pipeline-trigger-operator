@@ -6,36 +6,67 @@ import (
 
 	encodingJson "encoding/json"
 
-	sourcev1 "github.com/fluxcd/source-controller/api/v1"
-
 	pipelinev1alpha1 "github.com/jquad-group/pipeline-trigger-operator/api/v1alpha1"
 	"github.com/jquad-group/pipeline-trigger-operator/pkg/json"
 	apis "github.com/jquad-group/pipeline-trigger-operator/pkg/status"
-	tektondevv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 type GitrepositorySubscriber struct {
+	DynamicClient   dynamic.Interface
+	SubscriberError error
 }
 
 func NewGitrepositorySubscriber() *GitrepositorySubscriber {
-	return &GitrepositorySubscriber{}
+	cfg, err := config.GetConfig()
+	if err != nil {
+		return &GitrepositorySubscriber{DynamicClient: nil, SubscriberError: err}
+	}
+
+	dynClient, err := dynamic.NewForConfig(cfg)
+	if err != nil {
+		return &GitrepositorySubscriber{DynamicClient: nil, SubscriberError: err}
+	}
+
+	return &GitrepositorySubscriber{DynamicClient: dynClient, SubscriberError: nil}
+}
+
+func (gitrepositorySubscriber *GitrepositorySubscriber) List(ctx context.Context, client dynamic.Interface, namespace string, group string, version string) ([]unstructured.Unstructured, error) {
+	var gitRepositoryResource = schema.GroupVersionResource{Group: group, Version: version, Resource: "gitrepositories"}
+	list, err := client.Resource(gitRepositoryResource).Namespace(namespace).List(ctx, v1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+
+	return list.Items, nil
+}
+
+func (gitrepositorySubscriber *GitrepositorySubscriber) Get(ctx context.Context, client dynamic.Interface, name string, namespace string, group string, version string) (*unstructured.Unstructured, error) {
+	var gitRepositoryResource = schema.GroupVersionResource{Group: group, Version: version, Resource: "gitrepositories"}
+	obj, err := client.Resource(gitRepositoryResource).Namespace(namespace).Get(ctx, name, v1.GetOptions{})
+	if err != nil {
+		return nil, err
+	}
+
+	return obj, nil
 }
 
 func (gitrepositorySubscriber GitrepositorySubscriber) Subscribes(pipelineTrigger pipelinev1alpha1.PipelineTrigger) error {
 	return nil
 }
 
-func (gitrepositorySubscriber GitrepositorySubscriber) Exists(ctx context.Context, pipelineTrigger pipelinev1alpha1.PipelineTrigger, client client.Client, req ctrl.Request) error {
-	foundSource := &sourcev1.GitRepository{}
-	err := client.Get(ctx, types.NamespacedName{Name: pipelineTrigger.Spec.Source.Name, Namespace: pipelineTrigger.Namespace}, foundSource)
+func (gitrepositorySubscriber GitrepositorySubscriber) Exists(ctx context.Context, pipelineTrigger pipelinev1alpha1.PipelineTrigger, client client.Client, req ctrl.Request, group string, version string) error {
+	_, err := gitrepositorySubscriber.Get(ctx, gitrepositorySubscriber.DynamicClient, pipelineTrigger.Spec.Source.Name, pipelineTrigger.Namespace, group, version)
 	if err != nil {
 		return err
 	} else {
@@ -43,16 +74,16 @@ func (gitrepositorySubscriber GitrepositorySubscriber) Exists(ctx context.Contex
 	}
 }
 
-func (gitrepositorySubscriber GitrepositorySubscriber) CalculateCurrentState(secondClusterEnabled bool, secondClusterAddr string, secondClusterBearerToken string, ctx context.Context, pipelineTrigger *pipelinev1alpha1.PipelineTrigger, client client.Client, pipelineRunList tektondevv1.PipelineRunList) (bool, bool, error) {
-	foundSource := &sourcev1.GitRepository{}
-	if err := client.Get(ctx, types.NamespacedName{Name: pipelineTrigger.Spec.Source.Name, Namespace: pipelineTrigger.Namespace}, foundSource); err != nil {
+func (gitrepositorySubscriber GitrepositorySubscriber) CalculateCurrentState(secondClusterEnabled bool, secondClusterAddr string, secondClusterBearerToken string, ctx context.Context, pipelineTrigger *pipelinev1alpha1.PipelineTrigger, client client.Client, pipelineRunList unstructured.UnstructuredList, group string, version string) (bool, bool, error) {
+	foundSource, err := gitrepositorySubscriber.Get(ctx, gitrepositorySubscriber.DynamicClient, pipelineTrigger.Spec.Source.Name, pipelineTrigger.Namespace, group, version)
+	if err != nil {
 		return false, false, err
 	}
 	var gitRepository pipelinev1alpha1.GitRepository
 	gitRepository.GetGitRepository(*foundSource)
 	gitRepository.GenerateDetails()
 	gitRepositoryLabels := gitRepository.GenerateGitRepositoryLabelsAsHash()
-	gitRepositoryLabels["tekton.dev/pipeline"] = pipelineTrigger.Spec.PipelineRunSpec.PipelineRef.Name
+	gitRepositoryLabels["tekton.dev/pipeline"] = pipelineTrigger.Spec.PipelineRun.Object["spec"].(map[string]interface{})["pipelineRef"].(map[string]interface{})["name"].(string)
 	for i := range pipelineRunList.Items {
 		if gitrepositorySubscriber.HasIntersection(gitRepositoryLabels, pipelineRunList.Items[i].GetLabels()) {
 			return true, false, nil
@@ -72,7 +103,7 @@ func (gitrepositorySubscriber GitrepositorySubscriber) CalculateCurrentState(sec
 			return false, false, err
 		}
 
-		pRListExternal := &tektondevv1.PipelineRunList{}
+		pRListExternal := &unstructured.UnstructuredList{}
 		pipelineRunListExternal, err := myClientSet.RESTClient().Get().AbsPath("/apis/tekton.dev/v1").Namespace(pipelineTrigger.Namespace).Resource("pipelineruns").DoRaw(context.TODO())
 		if err != nil {
 			return false, false, err
@@ -90,10 +121,10 @@ func (gitrepositorySubscriber GitrepositorySubscriber) CalculateCurrentState(sec
 	return false, false, nil
 }
 
-func (gitrepositorySubscriber GitrepositorySubscriber) GetLatestEvent(ctx context.Context, pipelineTrigger *pipelinev1alpha1.PipelineTrigger, client client.Client, req ctrl.Request) (bool, error) {
-	foundSource := &sourcev1.GitRepository{}
+func (gitrepositorySubscriber GitrepositorySubscriber) GetLatestEvent(ctx context.Context, pipelineTrigger *pipelinev1alpha1.PipelineTrigger, client client.Client, req ctrl.Request, group string, version string) (bool, error) {
 	gotNewEvent := false
-	if err := client.Get(ctx, types.NamespacedName{Name: pipelineTrigger.Spec.Source.Name, Namespace: pipelineTrigger.Namespace}, foundSource); err != nil {
+	foundSource, err := gitrepositorySubscriber.Get(ctx, gitrepositorySubscriber.DynamicClient, pipelineTrigger.Spec.Source.Name, pipelineTrigger.Namespace, group, version)
+	if err != nil {
 		return gotNewEvent, err
 	}
 	var gitRepository pipelinev1alpha1.GitRepository
@@ -108,8 +139,8 @@ func (gitrepositorySubscriber GitrepositorySubscriber) GetLatestEvent(ctx contex
 	return gotNewEvent, nil
 }
 
-func (gitrepositorySubscriber GitrepositorySubscriber) CreatePipelineRunResource(pipelineTrigger *pipelinev1alpha1.PipelineTrigger, r *runtime.Scheme) []*tektondevv1.PipelineRun {
-	var prs []*tektondevv1.PipelineRun
+func (gitrepositorySubscriber GitrepositorySubscriber) CreatePipelineRunResource(pipelineTrigger *pipelinev1alpha1.PipelineTrigger, r *runtime.Scheme) []*unstructured.Unstructured {
+	var prs []*unstructured.Unstructured
 	if len(pipelineTrigger.Status.GitRepository.Conditions) == 0 {
 		paramsCorrectness, err := evaluatePipelineParamsForGitRepository(pipelineTrigger)
 		if paramsCorrectness {
@@ -141,55 +172,107 @@ func (gitrepositorySubscriber GitrepositorySubscriber) CreatePipelineRunResource
 }
 
 func evaluatePipelineParamsForGitRepository(pipelineTrigger *pipelinev1alpha1.PipelineTrigger) (bool, error) {
-	for paramNr := 0; paramNr < len(pipelineTrigger.Spec.PipelineRunSpec.Params); paramNr++ {
-		if strings.Contains(pipelineTrigger.Spec.PipelineRunSpec.Params[paramNr].Value.StringVal, "$") {
-			_, err := json.Exists(pipelineTrigger.Status.GitRepository.Details, pipelineTrigger.Spec.PipelineRunSpec.Params[paramNr].Value.StringVal)
+	// Extract "params" field as a generic JSON object
+	paramsJSON, _ := encodingJson.Marshal(pipelineTrigger.Spec.PipelineRun.Object["spec"].(map[string]interface{})["params"])
+
+	// Create a slice of Param structs
+	var params []Param
+
+	// Unmarshal the JSON into the Param struct
+	if err := encodingJson.Unmarshal(paramsJSON, &params); err != nil {
+		c := v1.Condition{
+			Type:               "False",
+			Status:             v1.ConditionFalse,
+			Reason:             "Unmarshal of params failed.",
+			Message:            err.Error(),
+			LastTransitionTime: v1.Now(),
+		}
+		pipelineTrigger.Status.GitRepository.AddOrReplaceCondition(c)
+		return false, err
+	}
+
+	for _, param := range params {
+		if strings.Contains(param.Value, "$") {
+			_, err := json.Exists(pipelineTrigger.Status.GitRepository.Details, param.Value)
 			if err != nil {
 				return false, err
 			}
 		}
 	}
+
 	return true, nil
 }
 
-func (gitrepositorySubscriber GitrepositorySubscriber) SetCurrentPipelineRunName(ctx context.Context, client client.Client, pipelineRun *tektondevv1.PipelineRun, pipelineRunName string, pipelineTrigger *pipelinev1alpha1.PipelineTrigger) {
+func (gitrepositorySubscriber GitrepositorySubscriber) SetCurrentPipelineRunName(ctx context.Context, client client.Client, pipelineRun *unstructured.Unstructured, pipelineRunName string, pipelineTrigger *pipelinev1alpha1.PipelineTrigger) {
 	pipelineTrigger.Status.GitRepository.LatestPipelineRun = pipelineRunName
 }
 
-func (gitrepositorySubscriber GitrepositorySubscriber) SetCurrentPipelineRunStatus(pipelineRunList tektondevv1.PipelineRunList, pipelineTrigger *pipelinev1alpha1.PipelineTrigger) {
-	for i := range pipelineRunList.Items {
-		if pipelineRunList.Items[i].Name == pipelineTrigger.Status.GitRepository.LatestPipelineRun {
-			for _, c := range pipelineRunList.Items[i].Status.Conditions {
-				if v1.ConditionStatus(c.Status) == v1.ConditionTrue {
-					condition := v1.Condition{
-						Type:               apis.ReconcileSuccess,
+func (gitrepositorySubscriber GitrepositorySubscriber) SetCurrentPipelineRunStatus(pipelineRunList unstructured.UnstructuredList, pipelineTrigger *pipelinev1alpha1.PipelineTrigger) {
+	for _, pipelineRun := range pipelineRunList.Items {
+		if pipelineRun.GetName() == pipelineTrigger.Status.GitRepository.LatestPipelineRun {
+			status, statusOk := pipelineRun.Object["status"].(map[string]interface{})
+			if !statusOk {
+				c := v1.Condition{
+					Type:               "False",
+					Status:             v1.ConditionFalse,
+					Reason:             "Unmarshal of status failed.",
+					Message:            "Unmarshal of status failed.",
+					LastTransitionTime: v1.Now(),
+				}
+				pipelineTrigger.Status.GitRepository.AddOrReplaceCondition(c)
+			}
+			currentConditions, conditionsOk := status["conditions"].([]interface{})
+			if !conditionsOk {
+				c := v1.Condition{
+					Type:               "False",
+					Status:             v1.ConditionFalse,
+					Reason:             "Unmarshal of conditions failed.",
+					Message:            "Unmarshal of conditions failed.",
+					LastTransitionTime: v1.Now(),
+				}
+				pipelineTrigger.Status.GitRepository.AddOrReplaceCondition(c)
+			}
+			for _, current := range currentConditions {
+				if conditionMap, ok := current.(map[string]interface{}); ok {
+					// Then, try to convert it to a v1.Condition
+					c := v1.Condition{
+						Type:               conditionMap["type"].(string),
+						Status:             v1.ConditionStatus(conditionMap["status"].(string)),
+						Reason:             conditionMap["reason"].(string),
+						Message:            conditionMap["message"].(string),
 						LastTransitionTime: v1.Now(),
-						ObservedGeneration: pipelineTrigger.GetGeneration(),
-						Reason:             apis.ReconcileSuccessReason,
-						Status:             v1.ConditionTrue,
-						Message:            "Reconciliation is successful.",
 					}
-					pipelineTrigger.Status.GitRepository.AddOrReplaceCondition(condition)
-				} else if v1.ConditionStatus(c.Status) == v1.ConditionFalse {
-					condition := v1.Condition{
-						Type:               apis.ReconcileSuccess,
-						LastTransitionTime: v1.Now(),
-						ObservedGeneration: pipelineTrigger.GetGeneration(),
-						Reason:             c.Reason,
-						Status:             v1.ConditionFalse,
-						Message:            c.Message,
+					if v1.ConditionStatus(c.Status) == v1.ConditionTrue {
+						condition := v1.Condition{
+							Type:               apis.ReconcileSuccess,
+							LastTransitionTime: v1.Now(),
+							ObservedGeneration: pipelineTrigger.GetGeneration(),
+							Reason:             apis.ReconcileSuccessReason,
+							Status:             v1.ConditionTrue,
+							Message:            "Reconciliation is successful.",
+						}
+						pipelineTrigger.Status.GitRepository.AddOrReplaceCondition(condition)
+					} else if v1.ConditionStatus(c.Status) == v1.ConditionFalse {
+						condition := v1.Condition{
+							Type:               apis.ReconcileSuccess,
+							LastTransitionTime: v1.Now(),
+							ObservedGeneration: pipelineTrigger.GetGeneration(),
+							Reason:             c.Reason,
+							Status:             v1.ConditionFalse,
+							Message:            c.Message,
+						}
+						pipelineTrigger.Status.GitRepository.AddOrReplaceCondition(condition)
+					} else {
+						condition := v1.Condition{
+							Type:               apis.ReconcileInProgress,
+							LastTransitionTime: v1.Now(),
+							ObservedGeneration: pipelineTrigger.GetGeneration(),
+							Reason:             apis.ReconcileInProgress,
+							Status:             v1.ConditionUnknown,
+							Message:            "Progressing",
+						}
+						pipelineTrigger.Status.GitRepository.AddOrReplaceCondition(condition)
 					}
-					pipelineTrigger.Status.GitRepository.AddOrReplaceCondition(condition)
-				} else {
-					condition := v1.Condition{
-						Type:               apis.ReconcileInProgress,
-						LastTransitionTime: v1.Now(),
-						ObservedGeneration: pipelineTrigger.GetGeneration(),
-						Reason:             apis.ReconcileInProgress,
-						Status:             v1.ConditionUnknown,
-						Message:            "Progressing",
-					}
-					pipelineTrigger.Status.GitRepository.AddOrReplaceCondition(condition)
 				}
 			}
 		}

@@ -34,12 +34,15 @@ spec:
           spec:
             description: PipelineTriggerSpec defines the desired state of PipelineTrigger
             properties:
-              pipelineRunSpec:
+              pipelineRun:
                 x-kubernetes-preserve-unknown-fields: true
               source:
                 description: Source points at the object specifying the Image Policy,
                   Git Repository or Pull Request found
                 properties:
+                  apiVersion:
+                    description: API Version of the source refernce.
+                    type: string
                   kind:
                     description: Kind of the source refernce.
                     enum:
@@ -53,18 +56,12 @@ spec:
                     minLength: 1
                     type: string
                 required:
+                - apiVersion
                 - kind
                 - name
                 type: object
-              tektonApiVersion:
-                description: The API Version of the tekton.dev PipelineRun object,
-                  e.g. tekton.dev/v1beta1
-                enum:
-                - tekton.dev/v1beta1
-                - tekton.dev/v1
-                type: string
             required:
-            - pipelineRunSpec
+            - pipelineRun
             - source
             type: object
           status:

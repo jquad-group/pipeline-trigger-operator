@@ -18,6 +18,8 @@ package controllers
 
 import (
 	"context"
+	"encoding/json"
+	"strings"
 
 	imagereflectorv1 "github.com/fluxcd/image-reflector-controller/api/v1beta2"
 
@@ -30,11 +32,13 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/utils/pointer"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
@@ -71,6 +75,11 @@ type PipelineTriggerReconciler struct {
 	SecondClusterBearerToken string
 }
 
+type Param struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
+
 // +kubebuilder:docs-gen:collapse=Reconciler Declaration
 
 /*
@@ -100,11 +109,34 @@ When the Source detects new version, a new Tekton PipelineRun starts
 func (r *PipelineTriggerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 
 	log := log.FromContext(ctx)
+	cfg, _ := config.GetConfig()
+	dynClient, _ := dynamic.NewForConfig(cfg)
 
 	var pipelineTrigger pipelinev1alpha1.PipelineTrigger
 	if err := r.Get(ctx, req.NamespacedName, &pipelineTrigger); err != nil {
 		// return and dont requeue
 		return ctrl.Result{}, nil
+	}
+
+	sourceApiVersion := pipelineTrigger.Spec.Source.APIVersion
+	sourceApiVersionSplitted := strings.Split(sourceApiVersion, "/")
+	sourceGroup := sourceApiVersionSplitted[0]
+	sourceVersion := sourceApiVersionSplitted[1]
+
+	tektonApiVersion := pipelineTrigger.Spec.PipelineRun.Object["apiVersion"].(string)
+	apiVersionSplitted := strings.Split(tektonApiVersion, "/")
+	tektonGroup := apiVersionSplitted[0]
+	tektonVersion := apiVersionSplitted[1]
+
+	// Extract "params" field as a generic JSON object
+	paramsJSON, _ := json.Marshal(pipelineTrigger.Spec.PipelineRun.Object["spec"].(map[string]interface{})["params"])
+
+	// Create a slice of Param structs
+	var params []Param
+
+	// Unmarshal the JSON into the Param struct
+	if err := json.Unmarshal(paramsJSON, &params); err != nil {
+		// Handle the error
 	}
 
 	patch := &unstructured.Unstructured{}
@@ -126,24 +158,26 @@ func (r *PipelineTriggerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 	// check if the referenced source exists
 	sourceSubscriber := createSourceSubscriber(&pipelineTrigger)
-	if err := sourceSubscriber.Exists(ctx, pipelineTrigger, r.Client, req); err != nil {
+	if err := sourceSubscriber.Exists(ctx, pipelineTrigger, r.Client, req, sourceGroup, sourceVersion); err != nil {
 		// requeue with error (maybe the resource was deployt afterwards?)
 		return sourceSubscriber.ManageError(ctx, &pipelineTrigger, req, r.Client, err)
 	}
 
 	// check if the referenced tekton pipeline exists
-	if err := r.existsPipelineResource(ctx, pipelineTrigger); err != nil {
+	if err := r.existsPipelineResource(ctx, pipelineTrigger, dynClient); err != nil {
 		// requeue with error (maybe the resource was deployt afterwards?)
 		return sourceSubscriber.ManageError(ctx, &pipelineTrigger, req, r.Client, err)
 	}
 
-	var pipelineRunList tektondevv1.PipelineRunList
-	errList := r.List(ctx, &pipelineRunList, client.InNamespace(req.Namespace), client.MatchingFields{pipelineRunField: req.Name})
+	//var pipelineRunListTest tektondevv1.PipelineRunList
+	//errList := r.List(ctx, &pipelineRunListTest, client.InNamespace(req.Namespace), client.MatchingFields{pipelineRunField: req.Name})
+
+	pipelineRunList, errList := ListTektonResources(ctx, dynClient, pipelineTrigger.Namespace, tektonGroup, tektonVersion, "pipelineruns")
 	if errList != nil {
 		log.Error(errList, "Failed to list PipelineRuns in ", pipelineTrigger.Namespace, " with label ", pipelineTrigger.Name)
 	}
 
-	running, runninOnSecondCluster, err := sourceSubscriber.CalculateCurrentState(r.SecondClusterEnabled, r.SecondClusterAddr, r.SecondClusterBearerToken, ctx, &pipelineTrigger, r.Client, pipelineRunList)
+	running, runninOnSecondCluster, err := sourceSubscriber.CalculateCurrentState(r.SecondClusterEnabled, r.SecondClusterAddr, r.SecondClusterBearerToken, ctx, &pipelineTrigger, r.Client, pipelineRunList, sourceGroup, sourceVersion)
 	if err != nil {
 		log.Error(err, "Second cluster is enabled, but the controller cannot connect to it ", pipelineTrigger.Namespace)
 	}
@@ -156,7 +190,7 @@ func (r *PipelineTriggerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	if !running && !runninOnSecondCluster {
 
 		// Get the Latest Source Event
-		_, err := sourceSubscriber.GetLatestEvent(ctx, &pipelineTrigger, r.Client, req)
+		_, err := sourceSubscriber.GetLatestEvent(ctx, &pipelineTrigger, r.Client, req, sourceGroup, sourceVersion)
 		if err != nil {
 			return sourceSubscriber.ManageError(ctx, &pipelineTrigger, req, r.Client, err)
 		}
@@ -164,7 +198,10 @@ func (r *PipelineTriggerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		prs := sourceSubscriber.CreatePipelineRunResource(&pipelineTrigger, r.Scheme)
 		// Start the PipelineRun resources
 		for pipelineRunCnt := 0; pipelineRunCnt < len(prs); pipelineRunCnt++ {
-			instanceName, _ := pipelineTrigger.StartPipelineRun(prs[pipelineRunCnt], ctx, req, r.Client)
+			instanceName, _, errRun := pipelineTrigger.StartPipelineRun(prs[pipelineRunCnt], ctx, req, r.Client)
+			if errRun != nil {
+				r.recorder.Event(&pipelineTrigger, core.EventTypeWarning, "Error", errRun.Error())
+			}
 			sourceSubscriber.SetCurrentPipelineRunName(ctx, r.Client, prs[pipelineRunCnt], instanceName, &pipelineTrigger)
 			newVersionMsg := "Started the pipeline " + instanceName + " in namespace " + pipelineTrigger.Namespace
 			r.recorder.Event(&pipelineTrigger, core.EventTypeNormal, "Info", newVersionMsg)
@@ -187,7 +224,6 @@ func (r *PipelineTriggerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		r.recorder.Event(&pipelineTrigger, core.EventTypeWarning, "Warning", errStatus.Error())
 	}
 
-	//objRef, _ := reference.GetReference(r.Scheme, &pipelineTrigger)
 	if r.MetricsRecorder != nil {
 		r.MetricsRecorder.RecordCondition(pipelineTrigger, sourceSubscriber)
 	}
@@ -219,7 +255,6 @@ This watch logic is complex, so we have split it into a separate method.
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *PipelineTriggerReconciler) SetupWithManager(mgr ctrl.Manager) error {
-
 	r.recorder = mgr.GetEventRecorderFor("PipelineTrigger")
 
 	/*
@@ -332,10 +367,26 @@ func (r *PipelineTriggerReconciler) findObjectsForSource(ctx context.Context, so
 	return requests
 }
 
-func (r *PipelineTriggerReconciler) existsPipelineResource(ctx context.Context, pipelineTrigger pipelinev1alpha1.PipelineTrigger) error {
+func ListTektonResources(ctx context.Context, client dynamic.Interface, namespace string, tektonGroup string, tektonVersion string, tektonResource string) (unstructured.UnstructuredList, error) {
+	var tektonApiResource = schema.GroupVersionResource{Group: tektonGroup, Version: tektonVersion, Resource: tektonResource}
+
+	list, err := client.Resource(tektonApiResource).Namespace(namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return unstructured.UnstructuredList{}, err
+	}
+
+	return *list, nil
+}
+
+func (r *PipelineTriggerReconciler) existsPipelineResource(ctx context.Context, pipelineTrigger pipelinev1alpha1.PipelineTrigger, client dynamic.Interface) error {
 	// check if the referenced tekton pipeline exists
-	foundTektonPipeline := &tektondevv1.Pipeline{}
-	err := r.Get(ctx, types.NamespacedName{Name: pipelineTrigger.Spec.PipelineRunSpec.PipelineRef.Name, Namespace: pipelineTrigger.Namespace}, foundTektonPipeline)
+	apiVersion := pipelineTrigger.Spec.PipelineRun.Object["apiVersion"].(string)
+	apiVersionSplitted := strings.Split(apiVersion, "/")
+	group := apiVersionSplitted[0]
+	version := apiVersionSplitted[1]
+	var pipelineRunResource = schema.GroupVersionResource{Group: group, Version: version, Resource: "pipelines"}
+	pipelineRef := pipelineTrigger.Spec.PipelineRun.Object["spec"].(map[string]interface{})["pipelineRef"].(map[string]interface{})["name"].(string)
+	_, err := client.Resource(pipelineRunResource).Namespace(pipelineTrigger.Namespace).Get(ctx, pipelineRef, metav1.GetOptions{})
 	if err != nil {
 		return err
 	} else {

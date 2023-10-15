@@ -2,11 +2,12 @@ package v1alpha1
 
 import (
 	"encoding/json"
+	"fmt"
 	"sort"
 	"strings"
 
-	imagereflectorv1 "github.com/fluxcd/image-reflector-controller/api/v1beta2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 const (
@@ -65,27 +66,33 @@ func (currentImagePolicy *ImagePolicy) Equals(newImagePolicy ImagePolicy) bool {
 	}
 }
 
-func (imagePolicy *ImagePolicy) GetImagePolicy(fluxImagePolicy imagereflectorv1.ImagePolicy) {
+func (imagePolicy *ImagePolicy) GetImagePolicy(fluxImagePolicy unstructured.Unstructured) {
 	imagePolicy.RepositoryName = getRepositoryName(fluxImagePolicy)
 	imagePolicy.ImageName = getImageName(fluxImagePolicy)
 	imagePolicy.ImageVersion = getImageVersion(fluxImagePolicy)
 }
 
-func getRepositoryName(fluxImagePolicy imagereflectorv1.ImagePolicy) string {
-	pathSubdirSize := len(strings.Split(fluxImagePolicy.Status.LatestImage, imageNameDelimeter))
-	repositoryName := strings.Split(fluxImagePolicy.Status.LatestImage, imageNameDelimeter)[pathSubdirSize-2]
+func getRepositoryName(fluxImagePolicy unstructured.Unstructured) string {
+	repositoryPath := fluxImagePolicy.Object["status"].(map[string]interface{})["latestImage"].(string)
+	repositoryPathStr := fmt.Sprintf("%v", repositoryPath)
+	pathSubdirSize := len(strings.Split(repositoryPathStr, imageNameDelimeter))
+	repositoryName := strings.Split(repositoryPathStr, imageNameDelimeter)[pathSubdirSize-2]
 	return repositoryName
 }
 
-func getImageName(fluxImagePolicy imagereflectorv1.ImagePolicy) string {
-	pathSubdirSize := len(strings.Split(fluxImagePolicy.Status.LatestImage, imageNameDelimeter))
-	imageNameWithVersion := strings.Split(fluxImagePolicy.Status.LatestImage, imageNameDelimeter)[pathSubdirSize-1]
+func getImageName(fluxImagePolicy unstructured.Unstructured) string {
+	repositoryPath := fluxImagePolicy.Object["status"].(map[string]interface{})["latestImage"].(string)
+	repositoryPathStr := fmt.Sprintf("%v", repositoryPath)
+	pathSubdirSize := len(strings.Split(repositoryPathStr, imageNameDelimeter))
+	imageNameWithVersion := strings.Split(repositoryPathStr, imageNameDelimeter)[pathSubdirSize-1]
 	imageName := strings.Split(imageNameWithVersion, imageVersionDelimeter)[imageNamePosition]
 	return imageName
 }
 
-func getImageVersion(fluxImagePolicy imagereflectorv1.ImagePolicy) string {
-	imageVersion := strings.Split(fluxImagePolicy.Status.LatestImage, imageVersionDelimeter)[imageVersionPosition]
+func getImageVersion(fluxImagePolicy unstructured.Unstructured) string {
+	repositoryPath := fluxImagePolicy.Object["status"].(map[string]interface{})["latestImage"].(string)
+	repositoryPathStr := fmt.Sprintf("%v", repositoryPath)
+	imageVersion := strings.Split(repositoryPathStr, imageVersionDelimeter)[imageVersionPosition]
 	return imageVersion
 }
 
