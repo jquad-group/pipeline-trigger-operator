@@ -1,0 +1,16 @@
+apiVersion: pipeline.jquad.rocks/v1alpha1
+kind: PullRequest
+metadata:
+  name: pipeline-trigger-operator
+spec:
+  gitProvider:
+    provider: Github
+    secretRef: git-clone
+    insecureSkipVerify: false
+    github:
+      url: https://github.com/jquad-group/pipeline-trigger-operator.git
+      owner: jquad-group
+      repository: pipeline-trigger-operator
+  targetBranch: 
+    name: refs/heads/main
+  interval: 1m

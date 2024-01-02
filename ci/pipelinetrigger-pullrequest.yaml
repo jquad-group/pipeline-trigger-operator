@@ -1,0 +1,57 @@
+apiVersion: pipeline.jquad.rocks/v1alpha1
+kind: PipelineTrigger
+metadata:
+  name: pipelinetrigger-for-pullrequest
+spec:
+  source:
+    kind: PullRequest
+    name: pipeline-trigger-operator
+  pipelineRunSpec:
+    pipelineRef:
+      name: pullrequest-pipeline-go
+    serviceAccountName: build-robot
+    podTemplate:
+      securityContext:
+        fsGroup: 0
+        runAsGroup: 0
+        runAsUser: 0
+    workspaces:
+    - name: workspace
+      volumeClaimTemplate:
+        spec:
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 1Gi
+          storageClasName: hcloud-volumes
+          volumeMode: Filesystem
+    params:
+      - name: pathToContext
+        value: /workspace/repo
+      - name: commit
+        value: ""
+      - name: branch-name
+        value: $.head.ref
+      - name: repo-url
+        value: https://github.com/jquad-group/pipeline-trigger-operator.git
+      - name: repo-url-alternate
+        value: https://github.com/jquad-group/pipeline-trigger-operator.git
+      - name: gitrevision
+        value: $.head.ref
+      - name: owner
+        value: jquad-group
+      - name: repository
+        value: pipeline-trigger-operator
+      - name: statusUrl
+        value: $.statuses_url
+      - name: state
+        value: success
+      - name: targetUrl
+        value: https://rancher.jquad.rocks/k8s/clusters/local/api/v1/namespaces/tekton-pipelines/services/http:tekton-dashboard:9097/proxy/#/pipelineruns
+      - name: context
+        value: jquad-group/tekton-ci
+      - name: githubSecretName
+        value: git-clone
+      - name: githubAccessTokenKey
+        value: accessToken

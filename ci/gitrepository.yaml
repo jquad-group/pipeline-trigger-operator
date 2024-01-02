@@ -1,0 +1,11 @@
+apiVersion: source.toolkit.fluxcd.io/v1beta2
+kind: GitRepository
+metadata:
+  name: pipeline-trigger-operator
+spec:
+  interval: 1m0s
+  ref:
+    branch: main
+  secretRef:
+    name: git-clone
+  url: https://github.com/jquad-group/pipeline-trigger-operator.git
