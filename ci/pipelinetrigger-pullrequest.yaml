@@ -34,7 +34,7 @@ spec:
             resources:
               requests:
                 storage: 1Gi
-            storageClasName: hcloud-volumes
+            storageClassName: hcloud-volumes
             volumeMode: Filesystem
       params:
         - name: pathToContext
