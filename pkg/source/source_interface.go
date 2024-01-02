@@ -21,8 +21,9 @@ type Param struct {
 
 type SourceSubscriber interface {
 	Subscribes(pipelineTrigger pipelinev1alpha1.PipelineTrigger) error
-	List(ctx context.Context, client dynamic.Interface, namespace string, group string, version string) ([]unstructured.Unstructured, error)
-	Get(ctx context.Context, client dynamic.Interface, name string, namespace string, group string, version string) (*unstructured.Unstructured, error)
+	List(ctx context.Context, client dynamic.DynamicClient, namespace string, group string, version string) ([]unstructured.Unstructured, error)
+	Get(ctx context.Context, client dynamic.DynamicClient, name string, namespace string, group string, version string) (*unstructured.Unstructured, error)
+	IsValid(ctx context.Context, pipelineTrigger pipelinev1alpha1.PipelineTrigger, client client.Client, req ctrl.Request) error
 	Exists(ctx context.Context, pipelineTrigger pipelinev1alpha1.PipelineTrigger, client client.Client, req ctrl.Request, group string, version string) error
 	GetLatestEvent(ctx context.Context, pipelineTrigger *pipelinev1alpha1.PipelineTrigger, client client.Client, req ctrl.Request, group string, version string) (bool, error)
 	CreatePipelineRunResource(pipelineTrigger *pipelinev1alpha1.PipelineTrigger, r *runtime.Scheme) []*unstructured.Unstructured

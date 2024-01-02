@@ -3,6 +3,7 @@ package v1alpha1
 import (
 	//pullrequestv1alpha1 "github.com/jquad-group/pullrequest-operator/api/v1alpha1"
 	"context"
+	"errors"
 	"strings"
 
 	encodingJson "encoding/json"
@@ -25,11 +26,10 @@ import (
 
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/config"
 )
 
 type PullrequestSubscriber struct {
-	DynamicClient   dynamic.Interface
+	DynamicClient   dynamic.DynamicClient
 	SubscriberError error
 }
 
@@ -41,21 +41,11 @@ type PullRequestResult struct {
 	Error                error
 }
 
-func NewPullrequestSubscriber() *PullrequestSubscriber {
-	cfg, err := config.GetConfig()
-	if err != nil {
-		return &PullrequestSubscriber{DynamicClient: nil, SubscriberError: err}
-	}
-
-	dynClient, err := dynamic.NewForConfig(cfg)
-	if err != nil {
-		return &PullrequestSubscriber{DynamicClient: nil, SubscriberError: err}
-	}
-
+func NewPullrequestSubscriber(dynClient dynamic.DynamicClient) *PullrequestSubscriber {
 	return &PullrequestSubscriber{DynamicClient: dynClient, SubscriberError: nil}
 }
 
-func (pullrequestSubscriber *PullrequestSubscriber) List(ctx context.Context, client dynamic.Interface, namespace string, group string, version string) ([]unstructured.Unstructured, error) {
+func (pullrequestSubscriber *PullrequestSubscriber) List(ctx context.Context, client dynamic.DynamicClient, namespace string, group string, version string) ([]unstructured.Unstructured, error) {
 	var pullRequestResource = schema.GroupVersionResource{Group: group, Version: version, Resource: "pullrequests"}
 	list, err := client.Resource(pullRequestResource).Namespace(namespace).List(ctx, v1.ListOptions{})
 	if err != nil {
@@ -65,7 +55,7 @@ func (pullrequestSubscriber *PullrequestSubscriber) List(ctx context.Context, cl
 	return list.Items, nil
 }
 
-func (pullrequestSubscriber *PullrequestSubscriber) Get(ctx context.Context, client dynamic.Interface, name string, namespace string, group string, version string) (*unstructured.Unstructured, error) {
+func (pullrequestSubscriber *PullrequestSubscriber) Get(ctx context.Context, client dynamic.DynamicClient, name string, namespace string, group string, version string) (*unstructured.Unstructured, error) {
 	var pullRequestResource = schema.GroupVersionResource{Group: group, Version: version, Resource: "pullrequests"}
 	obj, err := client.Resource(pullRequestResource).Namespace(namespace).Get(ctx, name, v1.GetOptions{})
 	if err != nil {
@@ -76,6 +66,22 @@ func (pullrequestSubscriber *PullrequestSubscriber) Get(ctx context.Context, cli
 }
 
 func (pullrequestSubscriber PullrequestSubscriber) Subscribes(pipelineTrigger pipelinev1alpha1.PipelineTrigger) error {
+	return nil
+}
+
+func (pullrequestSubscriber PullrequestSubscriber) IsValid(ctx context.Context, pipelineTrigger pipelinev1alpha1.PipelineTrigger, client client.Client, req ctrl.Request) error {
+	sourceApiVersion := pipelineTrigger.Spec.Source.APIVersion
+	sourceApiVersionSplitted := strings.Split(sourceApiVersion, "/")
+	if len(sourceApiVersionSplitted) != 2 {
+		return errors.New("could not split the api version of the source as expected")
+	}
+
+	tektonApiVersion := pipelineTrigger.Spec.PipelineRun.Object["apiVersion"].(string)
+	apiVersionSplitted := strings.Split(tektonApiVersion, "/")
+	if len(apiVersionSplitted) != 2 {
+		return errors.New("could not split the api version of the pipelinerun as expected")
+	}
+
 	return nil
 }
 
@@ -331,10 +337,9 @@ func (PullrequestSubscriber *PullrequestSubscriber) isStateIdentical(currentPipe
 	for _, condition := range conditions {
 		if conditionMap, ok := condition.(map[string]interface{}); ok {
 			c := v1.Condition{
-				Type:    conditionMap["type"].(string),
-				Status:  v1.ConditionStatus(conditionMap["status"].(string)),
-				Reason:  conditionMap["reason"].(string),
-				Message: conditionMap["message"].(string),
+				Type:   conditionMap["type"].(string),
+				Status: v1.ConditionStatus(conditionMap["status"].(string)),
+				Reason: conditionMap["reason"].(string),
 			}
 			if (v1.ConditionStatus(c.Status) == v1.ConditionTrue) && (currentBranch.GetLastCondition().Status == v1.ConditionTrue) {
 				return true
@@ -363,7 +368,7 @@ func (pullrequestSubscriber *PullrequestSubscriber) SetCurrentPipelineRunStatus(
 							c := v1.Condition{
 								Type:               "False",
 								Status:             v1.ConditionFalse,
-								Reason:             "Unmarshal of status failed.",
+								Reason:             "ParamsUnmarshalFailed",
 								Message:            "Unmarshal of status failed.",
 								LastTransitionTime: v1.Now(),
 							}
@@ -374,7 +379,7 @@ func (pullrequestSubscriber *PullrequestSubscriber) SetCurrentPipelineRunStatus(
 							c := v1.Condition{
 								Type:               "False",
 								Status:             v1.ConditionFalse,
-								Reason:             "Unmarshal of conditions failed.",
+								Reason:             "ParamsUnmarshalFailed",
 								Message:            "Unmarshal of conditions failed.",
 								LastTransitionTime: v1.Now(),
 							}

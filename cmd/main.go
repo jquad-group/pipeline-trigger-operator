@@ -22,6 +22,7 @@ import (
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
+	"k8s.io/client-go/dynamic"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
 	pipelinev1alpha1 "github.com/jquad-group/pipeline-trigger-operator/api/v1alpha1"
@@ -99,9 +100,12 @@ func main() {
 		os.Exit(1)
 	}
 
+	dynamicClient, err := dynamic.NewForConfig(mgr.GetConfig())
+
 	if enableSecondCluster {
 		if err = (&controllers.PipelineTriggerReconciler{
 			Client:                   mgr.GetClient(),
+			DynamicClient:            *dynamicClient,
 			Scheme:                   mgr.GetScheme(),
 			MetricsRecorder:          metricsRecorder,
 			SecondClusterEnabled:     enableSecondCluster,
@@ -114,6 +118,7 @@ func main() {
 	} else {
 		if err = (&controllers.PipelineTriggerReconciler{
 			Client:               mgr.GetClient(),
+			DynamicClient:        *dynamicClient,
 			Scheme:               mgr.GetScheme(),
 			MetricsRecorder:      metricsRecorder,
 			SecondClusterEnabled: false,

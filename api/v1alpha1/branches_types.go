@@ -19,11 +19,10 @@ func (branches *Branches) GetPrBranches(prBranches pullrequestv1alpha1.Branches)
 }
 
 func (branches *Branches) GenerateLabelsAsString() []string {
-	var result []string
-	prCounter := 0
+	result := []string{}
 	for _, value := range branches.Branches {
-		result[prCounter] = value.GenerateBranchLabelsAsString()
-		prCounter++
+		label := value.GenerateBranchLabelsAsString()
+		result = append(result, label)
 	}
 	return result
 }

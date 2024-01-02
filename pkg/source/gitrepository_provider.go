@@ -2,6 +2,7 @@ package v1alpha1
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	encodingJson "encoding/json"
@@ -18,30 +19,19 @@ import (
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 type GitrepositorySubscriber struct {
-	DynamicClient   dynamic.Interface
+	DynamicClient   dynamic.DynamicClient
 	SubscriberError error
 }
 
-func NewGitrepositorySubscriber() *GitrepositorySubscriber {
-	cfg, err := config.GetConfig()
-	if err != nil {
-		return &GitrepositorySubscriber{DynamicClient: nil, SubscriberError: err}
-	}
-
-	dynClient, err := dynamic.NewForConfig(cfg)
-	if err != nil {
-		return &GitrepositorySubscriber{DynamicClient: nil, SubscriberError: err}
-	}
-
+func NewGitrepositorySubscriber(dynClient dynamic.DynamicClient) *GitrepositorySubscriber {
 	return &GitrepositorySubscriber{DynamicClient: dynClient, SubscriberError: nil}
 }
 
-func (gitrepositorySubscriber *GitrepositorySubscriber) List(ctx context.Context, client dynamic.Interface, namespace string, group string, version string) ([]unstructured.Unstructured, error) {
+func (gitrepositorySubscriber *GitrepositorySubscriber) List(ctx context.Context, client dynamic.DynamicClient, namespace string, group string, version string) ([]unstructured.Unstructured, error) {
 	var gitRepositoryResource = schema.GroupVersionResource{Group: group, Version: version, Resource: "gitrepositories"}
 	list, err := client.Resource(gitRepositoryResource).Namespace(namespace).List(ctx, v1.ListOptions{})
 	if err != nil {
@@ -51,7 +41,7 @@ func (gitrepositorySubscriber *GitrepositorySubscriber) List(ctx context.Context
 	return list.Items, nil
 }
 
-func (gitrepositorySubscriber *GitrepositorySubscriber) Get(ctx context.Context, client dynamic.Interface, name string, namespace string, group string, version string) (*unstructured.Unstructured, error) {
+func (gitrepositorySubscriber *GitrepositorySubscriber) Get(ctx context.Context, client dynamic.DynamicClient, name string, namespace string, group string, version string) (*unstructured.Unstructured, error) {
 	var gitRepositoryResource = schema.GroupVersionResource{Group: group, Version: version, Resource: "gitrepositories"}
 	obj, err := client.Resource(gitRepositoryResource).Namespace(namespace).Get(ctx, name, v1.GetOptions{})
 	if err != nil {
@@ -62,6 +52,22 @@ func (gitrepositorySubscriber *GitrepositorySubscriber) Get(ctx context.Context,
 }
 
 func (gitrepositorySubscriber GitrepositorySubscriber) Subscribes(pipelineTrigger pipelinev1alpha1.PipelineTrigger) error {
+	return nil
+}
+
+func (gitrepositorySubscriber GitrepositorySubscriber) IsValid(ctx context.Context, pipelineTrigger pipelinev1alpha1.PipelineTrigger, client client.Client, req ctrl.Request) error {
+	sourceApiVersion := pipelineTrigger.Spec.Source.APIVersion
+	sourceApiVersionSplitted := strings.Split(sourceApiVersion, "/")
+	if len(sourceApiVersionSplitted) != 2 {
+		return errors.New("could not split the api version of the source as expected")
+	}
+
+	tektonApiVersion := pipelineTrigger.Spec.PipelineRun.Object["apiVersion"].(string)
+	apiVersionSplitted := strings.Split(tektonApiVersion, "/")
+	if len(apiVersionSplitted) != 2 {
+		return errors.New("could not split the api version of the pipelinerun as expected")
+	}
+
 	return nil
 }
 
@@ -183,7 +189,7 @@ func evaluatePipelineParamsForGitRepository(pipelineTrigger *pipelinev1alpha1.Pi
 		c := v1.Condition{
 			Type:               "False",
 			Status:             v1.ConditionFalse,
-			Reason:             "Unmarshal of params failed.",
+			Reason:             "ParamsUnmarshalFailed",
 			Message:            err.Error(),
 			LastTransitionTime: v1.Now(),
 		}
@@ -215,7 +221,7 @@ func (gitrepositorySubscriber GitrepositorySubscriber) SetCurrentPipelineRunStat
 				c := v1.Condition{
 					Type:               "False",
 					Status:             v1.ConditionFalse,
-					Reason:             "Unmarshal of status failed.",
+					Reason:             "ParamsUnmarshalFailed",
 					Message:            "Unmarshal of status failed.",
 					LastTransitionTime: v1.Now(),
 				}
@@ -226,7 +232,7 @@ func (gitrepositorySubscriber GitrepositorySubscriber) SetCurrentPipelineRunStat
 				c := v1.Condition{
 					Type:               "False",
 					Status:             v1.ConditionFalse,
-					Reason:             "Unmarshal of conditions failed.",
+					Reason:             "ParamsUnmarshalFailed",
 					Message:            "Unmarshal of conditions failed.",
 					LastTransitionTime: v1.Now(),
 				}
@@ -239,7 +245,6 @@ func (gitrepositorySubscriber GitrepositorySubscriber) SetCurrentPipelineRunStat
 						Type:               conditionMap["type"].(string),
 						Status:             v1.ConditionStatus(conditionMap["status"].(string)),
 						Reason:             conditionMap["reason"].(string),
-						Message:            conditionMap["message"].(string),
 						LastTransitionTime: v1.Now(),
 					}
 					if v1.ConditionStatus(c.Status) == v1.ConditionTrue {

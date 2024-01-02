@@ -5,31 +5,40 @@ metadata:
   namespace: jq-example-image
 spec:
   source: 
+    apiVersion: image.toolkit.fluxcd.io/v1beta2
     kind: ImagePolicy
     name: latest-image-notifier
-  pipelineRunSpec:
-    params:
-    - name: "repo-url"
-      value: "https://github.com/jquad-group/microservice.git"
-    - name: "branch-name"
-      value: "main"
-    - name: "imageLocation"
-      value: $.repositoryName  
-    pipelineRef: 
-      name: build-and-push-microservice-on-base-image-update
-    serviceAccountName: default
-    podTemplate:
-      securityContext:
-        runAsUser: 1001
-        runAsGroup: 1001
-        fsGroup: 1001
-    workspaces:
-    - name: workspace
-      volumeClaimTemplate:
-        spec:
-          accessModes:
-            - ReadWriteOnce
-          resources:
-            requests:
-              storage: 16Mi
-          volumeMode: Filesystem
+  pipelineRun:
+    apiVersion: tekton.dev/v1beta1
+    kind: PipelineRun
+    metadata:
+      generateName: build-and-push-microservice-on-base-image-update-
+      namespace: jq-example-image
+      labels:
+        app: microservice
+    spec:    
+      params:
+      - name: "repo-url"
+        value: "https://github.com/jquad-group/microservice.git"
+      - name: "branch-name"
+        value: "main"
+      - name: "imageLocation"
+        value: $.repositoryName  
+      pipelineRef: 
+        name: build-and-push-microservice-on-base-image-update
+      serviceAccountName: default
+      podTemplate:
+        securityContext:
+          runAsUser: 1001
+          runAsGroup: 1001
+          fsGroup: 1001
+      workspaces:
+      - name: workspace
+        volumeClaimTemplate:
+          spec:
+            accessModes:
+              - ReadWriteOnce
+            resources:
+              requests:
+                storage: 16Mi
+            volumeMode: Filesystem
