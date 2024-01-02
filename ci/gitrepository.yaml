@@ -1,7 +1,8 @@
-apiVersion: source.toolkit.fluxcd.io/v1beta2
+apiVersion: source.toolkit.fluxcd.io/v1
 kind: GitRepository
 metadata:
   name: pipeline-trigger-operator
+  namespace: pipeline-trigger-operator-system-build
 spec:
   interval: 1m0s
   ref:

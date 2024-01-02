@@ -1,0 +1,5 @@
+resources:
+  - gitrepository.yaml
+  - pullrequest.yaml
+  - pipelinetrigger-pullrequest.yaml
+  - pipelinetrigger-release.yaml

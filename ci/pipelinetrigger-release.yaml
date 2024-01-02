@@ -2,64 +2,74 @@ apiVersion: pipeline.jquad.rocks/v1alpha1
 kind: PipelineTrigger
 metadata:
   name: pipelinetrigger-for-release
+  namespace: pipeline-trigger-operator-system-build
 spec:
-  source:
+  source: 
+    apiVersion: source.toolkit.fluxcd.io/v1
     kind: GitRepository
     name: pipeline-trigger-operator
-  pipelineRunSpec:
-    pipelineRef:
-      name: release-pipeline-go
-    serviceAccountName: build-robot
-    podTemplate:
-      securityContext:
-        fsGroup: 0
-        runAsGroup: 0
-        runAsUser: 0
-    workspaces:
-    - name: workspace
-      volumeClaimTemplate:
-        spec:
-          accessModes:
-            - ReadWriteOnce
-          resources:
-            requests:
-              storage: 1Gi
-          storageClasName: hcloud-volumes
-          volumeMode: Filesystem
-    params:
-      - name: imageLocation
-        value: harbor.jquad.rocks/library
-      - name: imageTag
-        value: ""
-      - name: imageRepositoryName
-        value: pipeline-trigger-operator
-      - name: pathToContext
-        value: /workspace/repo
-      - name: pathToDockerFile
-        value: /workspace/repo/Dockerfile
-      - name: commit
-        value: ""
-      - name: branch-name
-        value: main
-      - name: repo-url
-        value: https://github.com/jquad-group/pipeline-trigger-operator.git
-      - name: repo-url-alternate
-        value: https://github.com/jquad-group/pipeline-trigger-operator.git
-      - name: gitrevision
-        value: main
-      - name: owner
-        value: jquad-group
-      - name: repository
-        value: pipeline-trigger-operator
-      - name: statusUrl
-        value: $.commitId
-      - name: state
-        value: success
-      - name: targetUrl
-        value: https://rancher.jquad.rocks/k8s/clusters/local/api/v1/namespaces/tekton-pipelines/services/http:tekton-dashboard:9097/proxy/#/pipelineruns
-      - name: context
-        value: jquad-group/tekton-ci
-      - name: githubSecretName
-        value: git-clone
-      - name: githubAccessTokenKey
-        value: accessToken
+  pipelineRun:
+    apiVersion: tekton.dev/v1beta1
+    kind: PipelineRun
+    metadata:
+      generateName: pipeline-trigger-operator-release-
+      namespace: pipeline-trigger-operator-system-build
+      labels:
+        app: pipeline-trigger-operator
+    spec:        
+      pipelineRef:
+        name: release-pipeline-go
+      serviceAccountName: build-robot
+      podTemplate:
+        securityContext:
+          fsGroup: 0
+          runAsGroup: 0
+          runAsUser: 0
+      workspaces:
+      - name: workspace
+        volumeClaimTemplate:
+          spec:
+            accessModes:
+              - ReadWriteOnce
+            resources:
+              requests:
+                storage: 1Gi
+            storageClasName: hcloud-volumes
+            volumeMode: Filesystem
+      params:
+        - name: imageLocation
+          value: harbor.jquad.rocks/library
+        - name: imageTag
+          value: ""
+        - name: imageRepositoryName
+          value: pipeline-trigger-operator
+        - name: pathToContext
+          value: /workspace/repo
+        - name: pathToDockerFile
+          value: /workspace/repo/Dockerfile
+        - name: commit
+          value: ""
+        - name: branch-name
+          value: main
+        - name: repo-url
+          value: https://github.com/jquad-group/pipeline-trigger-operator.git
+        - name: repo-url-alternate
+          value: https://github.com/jquad-group/pipeline-trigger-operator.git
+        - name: gitrevision
+          value: main
+        - name: owner
+          value: jquad-group
+        - name: repository
+          value: pipeline-trigger-operator
+        - name: statusUrl
+          value: $.commitId
+        - name: state
+          value: success
+        - name: targetUrl
+          value: https://rancher.jquad.rocks/k8s/clusters/local/api/v1/namespaces/tekton-pipelines/services/http:tekton-dashboard:9097/proxy/#/pipelineruns
+        - name: context
+          value: jquad-group/tekton-ci
+        - name: githubSecretName
+          value: git-clone
+        - name: githubAccessTokenKey
+          value: accessToken

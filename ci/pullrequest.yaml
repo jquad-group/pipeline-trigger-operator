@@ -2,6 +2,7 @@ apiVersion: pipeline.jquad.rocks/v1alpha1
 kind: PullRequest
 metadata:
   name: pipeline-trigger-operator
+  namespace: pipeline-trigger-operator-system-build
 spec:
   gitProvider:
     provider: Github
