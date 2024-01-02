@@ -2,11 +2,12 @@ package v1alpha1
 
 import (
 	"encoding/json"
+	"fmt"
 	"sort"
 	"strings"
 
-	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 const (
@@ -65,22 +66,28 @@ func (currentGitRepository *GitRepository) Equals(newGitRepository GitRepository
 	}
 }
 
-func getGitRepositoryName(fluxGitRepository sourcev1.GitRepository) string {
-	repositoryName := strings.Split(fluxGitRepository.Status.Artifact.Path, repositoryNameDelimeter)[gitRepositoryNamePosition]
+func getGitRepositoryName(fluxGitRepository unstructured.Unstructured) string {
+	repositoryPath := fluxGitRepository.Object["status"].(map[string]interface{})["artifact"].(map[string]interface{})["path"]
+	repositoryPathStr := fmt.Sprintf("%v", repositoryPath)
+	repositoryName := strings.Split(repositoryPathStr, repositoryNameDelimeter)[gitRepositoryNamePosition]
 	return repositoryName
 }
 
-func getBranchName(fluxGitRepository sourcev1.GitRepository) string {
-	branchName := strings.Split(fluxGitRepository.Status.Artifact.Revision, revisionDelimiter)[branchNamePosition]
+func getBranchName(fluxGitRepository unstructured.Unstructured) string {
+	repositoryRevision := fluxGitRepository.Object["status"].(map[string]interface{})["artifact"].(map[string]interface{})["revision"]
+	repositoryRevisionStr := fmt.Sprintf("%v", repositoryRevision)
+	branchName := strings.Split(repositoryRevisionStr, revisionDelimiter)[branchNamePosition]
 	return branchName
 }
 
-func getCommitId(fluxGitRepository sourcev1.GitRepository) string {
-	commitId := strings.Split(fluxGitRepository.Status.Artifact.Revision, commitIdDelimeter)[commitIdPosition]
+func getCommitId(fluxGitRepository unstructured.Unstructured) string {
+	repositoryCommitId := fluxGitRepository.Object["status"].(map[string]interface{})["artifact"].(map[string]interface{})["revision"]
+	repositoryCommitIdStr := fmt.Sprintf("%v", repositoryCommitId)
+	commitId := strings.Split(repositoryCommitIdStr, commitIdDelimeter)[commitIdPosition]
 	return commitId
 }
 
-func (gitRepository *GitRepository) GetGitRepository(fluxGitRepository sourcev1.GitRepository) {
+func (gitRepository *GitRepository) GetGitRepository(fluxGitRepository unstructured.Unstructured) {
 	gitRepository.RepositoryName = getGitRepositoryName(fluxGitRepository)
 	gitRepository.BranchName = getBranchName(fluxGitRepository)
 	gitRepository.CommitId = getCommitId(fluxGitRepository)

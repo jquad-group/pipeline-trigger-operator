@@ -4,34 +4,43 @@ metadata:
   name: pipelinetrigger-for-git-project
   namespace: jq-example-git
 spec:
-  source: 
+  source:
+    apiVersion: source.toolkit.fluxcd.io/v1
     kind: GitRepository
     name: microservice-code-repo
-  pipelineRunSpec:
-    params:
-    - name: "repo-url"
-      value: "https://github.com/jquad-group/microservice.git"
-    - name: "branch-name"
-      value: $.branchName
-    - name: "commitid"
-      value: $.commitId
-    - name: "imageLocation"
-      value: "docker.io/org/image"  
-    pipelineRef:
-      name: build-and-push-microservice-on-git-push
-    serviceAccountName: default
-    podTemplate:
-      securityContext:
-        runAsUser: 1001
-        runAsGroup: 1001
-        fsGroup: 1001
-    workspaces:
-    - name: workspace
-      volumeClaimTemplate:
-        spec:
-          accessModes:
-            - ReadWriteOnce
-          resources:
-            requests:
-              storage: 16Mi
-          volumeMode: Filesystem
+  pipelineRun:
+    apiVersion: tekton.dev/v1beta1
+    kind: PipelineRun
+    metadata:
+      generateName: build-and-push-microservice-on-git-push-
+      namespace: jq-example-git
+      labels:
+        app: microservice
+    spec:  
+      params:
+      - name: "repo-url"
+        value: "https://github.com/jquad-group/microservice.git"
+      - name: "branch-name"
+        value: $.branchName
+      - name: "commitid"
+        value: $.commitId
+      - name: "imageLocation"
+        value: "docker.io/org/image"  
+      pipelineRef:
+        name: build-and-push-microservice-on-git-push
+      serviceAccountName: default
+      podTemplate:
+        securityContext:
+          runAsUser: 1001
+          runAsGroup: 1001
+          fsGroup: 1001
+      workspaces:
+      - name: workspace
+        volumeClaimTemplate:
+          spec:
+            accessModes:
+              - ReadWriteOnce
+            resources:
+              requests:
+                storage: 16Mi
+            volumeMode: Filesystem

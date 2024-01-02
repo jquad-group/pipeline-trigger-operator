@@ -17,16 +17,12 @@ limitations under the License.
 package main
 
 import (
-	"context"
 	"flag"
 	"os"
 
-	gohclog "github.com/hashicorp/go-hclog"
-	"github.com/hashicorp/vault/physical/mysql"
-	"github.com/hashicorp/vault/sdk/physical"
-
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
+	"k8s.io/client-go/dynamic"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
 	pipelinev1alpha1 "github.com/jquad-group/pipeline-trigger-operator/api/v1alpha1"
@@ -52,11 +48,6 @@ var (
 	setupLog = ctrl.Log.WithName("setup")
 )
 
-const (
-	bucketName     = "testbucket"
-	leadershipFile = "leader.txt"
-)
-
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(imagereflectorv1.AddToScheme(scheme))
@@ -71,15 +62,19 @@ func main() {
 	var metricsAddr string
 	var enableLeaderElection bool
 	var probeAddr string
-	var enableCrossDatacenterLeaderElection bool
+	var enableSecondCluster bool
+	var secondClusterAddr string
+	var secondClusterBearerToken string
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
-	flag.BoolVar(&enableCrossDatacenterLeaderElection, "cross-dc-leader-elect", false,
-		"Enable leader election for controller manager. "+
-			"Enabling this will ensure there is only one active controller manager in a cross data center setup.")
+	flag.BoolVar(&enableSecondCluster, "second-cluster", false,
+		"Enable second cluster. "+
+			"Enabling this will ensure there is only one pipelinerun in a 2 cluster setup.")
+	flag.StringVar(&secondClusterAddr, "second-cluster-address", "", "The address of the second server API server.")
+	flag.StringVar(&secondClusterBearerToken, "second-cluster-bearer-token", "", "The bearer token for the communication with the second API server.")
 
 	opts := zap.Options{
 		Development: true,
@@ -92,120 +87,61 @@ func main() {
 	metricsRecorder := metricsApi.NewRecorder()
 	crtlruntimemetrics.Registry.MustRegister(metricsRecorder.Collectors()...)
 
-	if enableCrossDatacenterLeaderElection {
-		logger := gohclog.Default()
+	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
+		Scheme:                 scheme,
+		MetricsBindAddress:     metricsAddr,
+		Port:                   9443,
+		HealthProbeBindAddress: probeAddr,
+		LeaderElection:         enableLeaderElection,
+		LeaderElectionID:       "bb9e0b30.jquad.rocks",
+	})
+	if err != nil {
+		setupLog.Error(err, "unable to start manager")
+		os.Exit(1)
+	}
 
-		b, err := mysql.NewMySQLBackend(map[string]string{
-			"username":                     getEnv("username"),
-			"password":                     getEnv("password"),
-			"address":                      getEnv("address"),
-			"plaintext_connection_allowed": getEnv("plaintext_connection_allowed"),
-			"ha_enabled":                   getEnv("ha_enabled"),
-		}, logger)
-		if err != nil {
-			panic(err)
-		}
-		haBackend, ok := b.(physical.HABackend)
-		if !ok {
-			panic("type casting failed")
-		}
+	dynamicClient, err := dynamic.NewForConfig(mgr.GetConfig())
 
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
-
-		for {
-			lock, err := haBackend.LockWith(leadershipFile, "ignored")
-			if err != nil {
-				panic(err)
-			}
-
-			logger.Info("Running for leadership...")
-			doneCh, err := lock.Lock(ctx.Done())
-			if err != nil {
-				panic(err)
-			}
-			logger.Info("Elected as leader.")
-			// business logic
-			mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
-				Scheme:                 scheme,
-				MetricsBindAddress:     metricsAddr,
-				Port:                   9443,
-				HealthProbeBindAddress: probeAddr,
-				LeaderElection:         enableLeaderElection,
-				LeaderElectionID:       "bb9e0b30.jquad.rocks",
-			})
-			if err != nil {
-				setupLog.Error(err, "unable to start manager")
-				os.Exit(1)
-			}
-
-			if err = (&controllers.PipelineTriggerReconciler{
-				Client: mgr.GetClient(),
-				Scheme: mgr.GetScheme(),
-			}).SetupWithManager(mgr); err != nil {
-				setupLog.Error(err, "unable to create controller", "controller", "PipelineTrigger")
-				os.Exit(1)
-			}
-			//+kubebuilder:scaffold:builder
-
-			if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
-				setupLog.Error(err, "unable to set up health check")
-				os.Exit(1)
-			}
-			if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
-				setupLog.Error(err, "unable to set up ready check")
-				os.Exit(1)
-			}
-
-			setupLog.Info("starting manager")
-			if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
-				setupLog.Error(err, "problem running manager")
-				os.Exit(1)
-			}
-			<-doneCh
-			logger.Info("Lost leadership.")
-			if err := lock.Unlock(); err != nil {
-				panic(err)
-			}
-		}
-	} else {
-		mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
-			Scheme:                 scheme,
-			MetricsBindAddress:     metricsAddr,
-			Port:                   9443,
-			HealthProbeBindAddress: probeAddr,
-			LeaderElection:         enableLeaderElection,
-			LeaderElectionID:       "bb9e0b30.jquad.rocks",
-		})
-		if err != nil {
-			setupLog.Error(err, "unable to start manager")
-			os.Exit(1)
-		}
-
+	if enableSecondCluster {
 		if err = (&controllers.PipelineTriggerReconciler{
-			Client:          mgr.GetClient(),
-			Scheme:          mgr.GetScheme(),
-			MetricsRecorder: metricsRecorder,
+			Client:                   mgr.GetClient(),
+			DynamicClient:            *dynamicClient,
+			Scheme:                   mgr.GetScheme(),
+			MetricsRecorder:          metricsRecorder,
+			SecondClusterEnabled:     enableSecondCluster,
+			SecondClusterAddr:        secondClusterAddr,
+			SecondClusterBearerToken: secondClusterBearerToken,
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "PipelineTrigger")
 			os.Exit(1)
 		}
-		//+kubebuilder:scaffold:builder
+	} else {
+		if err = (&controllers.PipelineTriggerReconciler{
+			Client:               mgr.GetClient(),
+			DynamicClient:        *dynamicClient,
+			Scheme:               mgr.GetScheme(),
+			MetricsRecorder:      metricsRecorder,
+			SecondClusterEnabled: false,
+		}).SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "PipelineTrigger")
+			os.Exit(1)
+		}
+	}
+	//+kubebuilder:scaffold:builder
 
-		if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
-			setupLog.Error(err, "unable to set up health check")
-			os.Exit(1)
-		}
-		if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
-			setupLog.Error(err, "unable to set up ready check")
-			os.Exit(1)
-		}
+	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
+		setupLog.Error(err, "unable to set up health check")
+		os.Exit(1)
+	}
+	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
+		setupLog.Error(err, "unable to set up ready check")
+		os.Exit(1)
+	}
 
-		setupLog.Info("starting manager")
-		if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
-			setupLog.Error(err, "problem running manager")
-			os.Exit(1)
-		}
+	setupLog.Info("starting manager")
+	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
+		setupLog.Error(err, "problem running manager")
+		os.Exit(1)
 	}
 
 }
@@ -220,11 +156,3 @@ func getEnv(envVar string) (string, error) {
 		return ns, nil
 	}
 */
-func getEnv(envVar string) string {
-
-	ns, found := os.LookupEnv(envVar)
-	if !found {
-		return ""
-	}
-	return ns
-}

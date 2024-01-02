@@ -8,3 +8,7 @@ spec:
     spec:
       containers:
       - name: manager
+        command:
+        - /manager
+        args:
+        - --leader-elect

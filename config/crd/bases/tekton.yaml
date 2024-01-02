@@ -37,14 +37,6 @@ spec:
       - tekton
       - tekton-pipelines
   scope: Cluster
-  conversion:
-    strategy: Webhook
-    webhook:
-      conversionReviewVersions: ["v1beta1"]
-      clientConfig:
-        service:
-          name: tekton-pipelines-webhook
-          namespace: tekton-pipelines
 
 ---
 # Copyright 2020 The Tekton Authors
@@ -184,14 +176,6 @@ spec:
       - tekton
       - tekton-pipelines
   scope: Namespaced
-  conversion:
-    strategy: Webhook
-    webhook:
-      conversionReviewVersions: ["v1beta1", "v1"]
-      clientConfig:
-        service:
-          name: tekton-pipelines-webhook
-          namespace: tekton-pipelines
 
 ---
 # Copyright 2019 The Tekton Authors
@@ -294,14 +278,6 @@ spec:
       - pr
       - prs
   scope: Namespaced
-  conversion:
-    strategy: Webhook
-    webhook:
-      conversionReviewVersions: ["v1beta1", "v1"]
-      clientConfig:
-        service:
-          name: tekton-pipelines-webhook
-          namespace: tekton-pipelines
 
 ---
 # Copyright 2022 The Tekton Authors
@@ -397,14 +373,6 @@ spec:
         - name: EndTime
           type: string
           jsonPath: .status.conditions[?(@.type=='Succeeded')].lastTransitionTime
-  conversion:
-    strategy: Webhook
-    webhook:
-      conversionReviewVersions: ["v1alpha1", "v1beta1"]
-      clientConfig:
-        service:
-          name: tekton-pipelines-webhook
-          namespace: tekton-pipelines
 
 ---
 # Copyright 2019 The Tekton Authors
@@ -479,14 +447,6 @@ spec:
       - tekton
       - tekton-pipelines
   scope: Namespaced
-  conversion:
-    strategy: Webhook
-    webhook:
-      conversionReviewVersions: ["v1beta1", "v1"]
-      clientConfig:
-        service:
-          name: tekton-pipelines-webhook
-          namespace: tekton-pipelines
 
 ---
 # Copyright 2019 The Tekton Authors
@@ -589,14 +549,6 @@ spec:
       - tr
       - trs
   scope: Namespaced
-  conversion:
-    strategy: Webhook
-    webhook:
-      conversionReviewVersions: ["v1beta1", "v1"]
-      clientConfig:
-        service:
-          name: tekton-pipelines-webhook
-          namespace: tekton-pipelines
 
 ---
 # Copyright 2022 The Tekton Authors

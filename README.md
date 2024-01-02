@@ -1,29 +1,83 @@
-# Pipeline Trigger Operator
+# Pipeline Trigger Operator 
 
 [![Go Report Card](https://goreportcard.com/badge/jquad-group/pipeline-trigger-operator)](https://goreportcard.com/report/jquad-group/pipeline-trigger-operator)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/jquad-group/pipeline-trigger-operator/blob/main/LICENSE)
 
-The `Pipeline Trigger Operator` increases the level of automation of the build pipeline of a software component by enhancing it with reactive capabilities to react to events in the build environment.
+- [Overview](#overview)
+- [Features](#features)
+- [Prerequisites](#prerequisites)
+  - [Installation](#installation)
+  - [Installation with Monitoring Support](#installation-with-monitoring-support)
+- [Specification](#specification)
+- [Usage](#usage)
+  - [Example 1: Build a Microservice Image on Git Push](#example-1-build-a-microservice-image-on-git-push)
+  - [Example 2: Build a Microservice Image on New Base Image Release](#example-2-build-a-microservice-image-on-new-base-image-release)
+  - [Example 3: Build a Microservice Image on New Pull Request](#example-3-build-a-microservice-image-on-new-pull-request)  
+- [Advanced Usage](#advanced-usage)
+  - [Dynamic Input Parameters](#dynamic-input-parameters)
+  - [Dual Cluster Deployment](#dual-cluster-deployment)
+- [Development and Contribution](#development-and-contribution)
 
-The `Pipeline Trigger Operator` runs on [Kubernetes](https://kubernetes.io/docs/home/) and integrates itself in the [GitOps operational framework](https://about.gitlab.com/topics/gitops/) to allow for automated creation of build pipelines. It does that by listening for events from the [Flux v2](https://fluxcd.io/flux/) `ImagePolicy` and `GitRepository` resources as well as from the [pullrequest-operator](https://github.com/jquad-group/pullrequest-operator/) `PullRequest` resource and reacts by creating a [Tekton](https://tekton.dev/docs/) `PipelineRun` for a given `Pipeline` resouce.
+## Overview
 
-**Automated creation of Tekton PipelineRuns on events from Flux resources**
+The **Pipeline Trigger Operator** is a tool designed to enhance the automation of software build pipelines. It brings reactive capabilities to your build pipeline by allowing it to react to various events within the kubernetes build environment.
 
-The use of the automated pipeline trigger operator is based on the following resources:
-1. `GitRepository` - [**Flux** resource](https://fluxcd.io/docs/components/source/gitrepositories/), configure as required
-2. `ImageRepository` - [**Flux** resource](https://fluxcd.io/docs/components/image/imagerepositories/), configure as required
-3. `ImagePolicy` - [**Flux** resource](https://fluxcd.io/docs/components/image/imagepolicies/), configure as required
-4. `PullRequest` - [**PullRequest** resource](https://github.com/jquad-group/pullrequest-operator/), configure as required
-5. `Pipeline` - [**Tekton** resource](https://tekton.dev/docs/pipelines/pipelines/), configure as required
-6. `PipelineTrigger` - **PipelineTrigger* resource, configuration description in this readme
+The operator runs on [Kubernetes](https://kubernetes.io/docs/home/) and seamlessly integrates into the GitOps operational framework to enable automated build pipeline creation. It accomplishes this by monitoring events from various resources, including [Flux v2](https://fluxcd.io/flux/) `ImagePolicy` and `GitRepository` resources, as well as the [pullrequest-operator](https://github.com/jquad-group/pullrequest-operator/) `PullRequest` resource. When triggered, it creates a [Tekton](https://tekton.dev/docs/) `PipelineRun` for a specified `Pipeline` resource.
 
 [Short video with the components overview](https://www.youtube.com/watch?v=3TmczsYnDNc)
 
 ![Workflow](https://github.com/jquad-group/pipeline-trigger-operator/blob/main/img/pipeline-trigger-operator.svg)
 
-# PipelineTrigger Specification
+## Features
 
-```
+- Automated creation of Tekton `PipelineRuns` in response to events from Flux and Pull Request Operator resources.
+- Works with `GitRepository`, `ImagePolicy`, and `PullRequest` resources.
+- Dynamically configurable `PipelineRun` input parameters using JSON path expressions.
+- Monitoring support with Prometheus, Grafana, and a dedicated dashboard.
+
+## Prerequisites
+
+Before using the **Pipeline Trigger Operator**, ensure you have the following prerequisites in place:
+
+- [Flux](https://fluxcd.io/docs/installation/#install-the-flux-cli) is installed on your Kubernetes cluster.
+- The [PullRequest Operator](https://github.com/jquad-group/pullrequest-operator/) is also installed on your cluster.
+
+### Installation
+
+You can install the **Pipeline Trigger Operator** using the following commands in the `pipeline-trigger-operator-system` namespace:
+
+- Without RBAC Proxy:
+
+  ```shell
+  kubectl apply -f https://github.com/jquad-group/pipeline-trigger-operator/releases/latest/download/release.yaml
+  ```
+
+- Or with RBAC Proxy:
+
+  ```shell
+  kubectl apply -f https://github.com/jquad-group/pipeline-trigger-operator/releases/latest/download/release-with-rbac-proxy.yaml
+  ```
+
+### Installation with Monitoring Support
+
+The Pipeline Trigger Operator utilizes the following components:
+- Prometheus Operator
+- Prometheus
+- Grafana 
+
+Install using the following command: 
+
+  ```shell
+  kubectl apply -f https://github.com/jquad-group/pipeline-trigger-operator/releases/latest/download/release-with-monitoring.yaml
+  ```
+
+You can import the Grafana dashboard from `config/dashboard/dashboard.json` to monitor the operator's performance.
+
+![Dashboard](https://github.com/jquad-group/pipeline-trigger-operator/blob/main/img/dashboard.png)
+
+## Specification
+
+```yaml
 apiVersion: pipeline.jquad.rocks/v1alpha1
 kind: PipelineTrigger
 metadata:
@@ -33,225 +87,215 @@ spec:
   # Source can be ImagePolicy, GitRepository, or PullRequest
   # The operator subscribes for events from these resources
   source: 
+    apiVersion: image.toolkit.fluxcd.io/v1beta2
     kind: ImagePolicy
     name: latest-image-notifier
-  # This can be either tekton.dev/v1beta1 or tekton.dev/v1, if omitted uses tekton.dev/v1beta1
-  tektonApiVersion: tekton.dev/v1beta1
-  # The PipelineRunSpec of Tekton
+  # The Tekton PipelineRun
   # See the Tekton API: https://tekton.dev/docs/pipelines/pipeline-api/#tekton.dev/v1beta1.PipelineRun or https://tekton.dev/docs/pipelines/pipeline-api/#tekton.dev/v1.PipelineRun
-  pipelineRunSpec: 
-    # The name of Pipeline that is used for the creation of the PipelineRun resources
-    pipelineRef:
-      name: build-and-push-pipeline
-    # Your kubernetes service account name
-    serviceAccountName: build-bot
-    # The workspace for the tekton pipeline
-    workspaces:
-    - name: workspace
-      volumeClaimTemplate:
-        spec:
-          accessModes:
-            - ReadWriteOnce
-          resources:
-            requests:
-              storage: 16Mi
-          volumeMode: Filesystem
-    # The specific input parameters for the pipeline that is used for the creation of the PipelineRun 
-    params:
-    - name: "repo-url"
-      value: "https://github.com/my-project.git"
-    - name: "branch-name"
-      value: "main" # or JSON path expression, e.g. $.imageName
-    - name: "commit-id"
-      value: "03da4fdbf8f3e027fb56dd0d96244c951a24f2b4" # or JSON path expression - commit id taken from the Flux Gitrepository resource
-```
-
-## Using dynamic input parameters for the pipeline
-
-The pipeline-trigger-operator accepts json path expressions. 
-
-E.g. given the following status:
-
-```
-Status:
-  Branches:
-  Git Repository:
-    Branch Name:  main
-    Commit Id:    03da4fdbf8f3e027fb56dd0d96244c951a24f2b4
-    Details:                 {"branchName":"main","commitId":"03da4fdbf8f3e027fb56dd0d96244c951a24f2b4","repositoryName":"microservice-code-repo"}
-    Repository Name:         microservice-code-repo
-```
-the branch name can be extracted from the `Details` using the expression `$.branchName` as a input parameter for the pipeline:
-
-```
-    params:
-    - name: "branch-name"
-      value: $.branchName
-```
-
-# Prerequisites 
-
-- Flux is already installed on the cluster: https://fluxcd.io/docs/installation/#install-the-flux-cli
-
-- The PullRequest Operator is already installed on the cluster: https://github.com/jquad-group/pullrequest-operator/
-
-# Installation
-
-Run the following command: 
-```
-kubectl apply -f https://github.com/jquad-group/pipeline-trigger-operator/releases/latest/download/release.yaml
-```
-
-or with RBAC Proxy:
-```
-kubectl apply -f https://github.com/jquad-group/pipeline-trigger-operator/releases/latest/download/release-with-rbac-proxy.yaml
-```
-
-The operator is installed in the `pipeline-trigger-operator-system` namespace. 
-
-After the installation of the operator, the `PipelineTrigger` resource is added to the kubernetes cluster.
-
-# Install with Monitoring Support
-
-The Pipeline Trigger Operator utilizes the following components:
-- Prometheus Operator
-- Prometheus
-- Grafana 
-
-Run the following command: 
-```
-kubectl apply -f https://github.com/jquad-group/pipeline-trigger-operator/releases/latest/download/release-with-monitoring.yaml
-```
-
-Then you can import the dashboard in Grafana from `config/dashboard/dashboard.json`.
-
-![Dashboard](https://github.com/jquad-group/pipeline-trigger-operator/blob/main/img/dashboard.png)
-
-
-# Cross Data Center Distribution Lock
-
-If you deploy the operator in a multi cluster setup, but only of them must be working at a time, the argument `--cross-ds-leader-elect` should be added in the `Deployment`:
-
-```
+  pipelineRun: 
+    apiVersion: tekton.dev/v1
+    kind: PipelineRun
+    metadata:
+      # Can be either name or generateName
+      generateName: microservice-pipeline-
+      # This must be the same with the PipelineTriggers namespace
+      namespace: jq-example-namespace
+      labels:
+        app: microservice
     spec:
+      pipelineRef:
+        name: release-pipeline-go
+      serviceAccountName: build-robot
+      podTemplate:
+        securityContext:
+          fsGroup: 0
+          runAsGroup: 0
+          runAsUser: 0        
+      workspaces:
+      - name: workspace
+        volumeClaimTemplate:
+          spec:
+            accessModes:
+              - ReadWriteOnce
+            resources:
+              requests:
+                storage: 128Mi
+            volumeMode: Filesystem              
+    # The specific input parameters for the pipeline used for the creation of the PipelineRun 
+      params:
+      - name: "repo-url"
+        value: "https://github.com/my-project.git"
+      - name: "image-name"
+        value: "main" # or JSON path expression, e.g. $.imageName
+```
+
+## Usage
+
+### Example 1: Build a Microservice Image on Git Push
+
+1. Create an example namespace:
+
+    ```shell
+     kubectl create ns jq-example-git
+    ```
+
+2. Deploy the `GitRepository` resource to clone a branch from a git repository:
+
+    ```shell
+    kubectl apply -f examples/create-pipeline-on-git-push/gitrepository.yaml
+    ```
+
+3. Deploy the `tekton-pipelines.yaml` to create a dummy Tekton pipeline, which will be started when the GitRepository detects new commits:
+
+    ```shell
+    kubectl apply -f examples/create-pipeline-on-git-push/tekton-pipelines.yaml
+    ```
+
+4. Deploy the `pipelinetrigger.yaml` to trigger the pipeline:
+
+    ```shell
+    kubectl apply -f examples/create-pipeline-on-git-push/pipelinetrigger.yaml
+    ```
+
+The PipelineRun will be created automatically, when new git commit is detected. 
+
+### Example 2: Build a Microservice Image on New Base Image Release
+
+1. Create an example namespace:
+
+    ```shell
+    kubectl create ns jq-example-image
+    ```
+
+2. Deploy the `ImageRepository` resource to fetch tags for a repository in a container registry:
+
+    ```shell
+    kubectl apply -f examples/create-pipeline-on-image-update/imagerepository.yaml
+    ```
+
+3. Deploy the `ImagePolicy` resource to select the latest tag from the `ImageRepository`:
+
+    ```shell
+    kubectl apply -f examples/create-pipeline-on-image-update/imagepolicy.yaml
+    ```
+
+4. Deploy the `tekton-pipelines.yaml` to create a dummy Tekton pipeline, which will be started when the `ImagePolicy` detects new image versions:
+
+    ```shell
+    kubectl apply -f examples/create-pipeline-on-image-update/tekton-pipelines.yaml
+    ``` 
+
+5. Deploy the `pipelinetrigger.yaml` to trigger the pipeline:
+
+    ```shell
+    kubectl apply -f examples/create-pipeline-on-image-update/pipelinetrigger.yaml
+    ```
+
+The PipelineRun will be created automatically, when new base image is released. 
+
+### Example 3: Build a Microservice Image on New Pull Request
+
+1. Create an example namespace:
+
+    ```shell
+    kubectl create ns jq-example-pr
+    ```
+
+2. Deploy the `PullRequest` resource to check for new pull requests for a git repository:
+
+    ```shell
+    kubectl apply -f examples/create-pipeline-on-pr/pullrequest.yaml
+    ```
+
+3. Deploy the `tekton-pipelines.yaml` to create a dummy Tekton pipeline, which will be started when the GitRepository detects new commits:
+
+    ```shell
+    kubectl apply -f examples/create-pipeline-on-pr/tekton-pipelines.yaml
+    ```
+
+4. Deploy the `pipelinetrigger.yaml` to trigger the pipeline:
+
+    ```shell
+    kubectl apply -f examples/create-pipeline-on-pr/pipelinetrigger.yaml
+    ```
+
+The PipelineRun will be created automatically, when new pull requests are detected.
+
+## Advanced Usage
+
+### Dynamic Input Parameters
+
+The operator accepts JSON path expressions for dynamic input parameters, enabling you to extract and use specific data from events.
+
+#### Example: Starting a PipelineRun on Events from PullRequest
+
+Given the following Github response:
+
+```json
+{"id":1431803478,"number":8,"state":"open","locked":false,"title":"simple pr","created_at":"2023-07-12T18:37:32Z"}
+```
+
+You can use the expression `$.title` in a `PipelineTrigger` to extract the title like this:
+
+```yaml
+params:
+- name: "pullrequest-title"
+  value: $.title
+```
+
+The whole Github/Bitbucket response can be shown, by using `kubectl describe pullrequest`.
+
+#### Example: Starting a PipelineRun on Events from GitRepository
+
+You can use the following JSON expressions in the arguments of a `PipelineRun`:
+
+`$.branchName` - The current branch name
+
+`$.branchId` - The current commit ID
+
+`$.repositoryName` - The current repository name
+
+#### Example: Starting a PipelineRun on Events from ImagePolicy
+
+You can use the following JSON expressions in the arguments of a `PipelineRun`:
+
+`$.imageName` - The current image name
+
+`$.imageVersion` - The current image version
+
+`$.repositoryName` - The current repository name
+
+### Dual Cluster Deployment
+
+If you plan to deploy the operator in a dual-cluster setup and wish to evenly distribute `PipelineRuns` between the clusters, you can achieve this by configuring the Controller `Deployment` with the following arguments:
+
+```yaml
       containers:
-      - args:
+      - name: manager
+        command:
+        - /manager
+        args:
         - --leader-elect
-        - --cross-dc-leader-elect
+        - --second-cluster
+        - --second-cluster-address=xxx
+        - --second-cluster-bearer-token=xxx     
 ```
 
-In order for the cross datacenter leader election to work a MySQL backend is needed. The configuration for the backend can be set via enviroment variables or via `Secrets` or `ConfigMaps`:
+In this dual-cluster configuration, the operator will efficiently manage and distribute `PipelineRuns` across the specified clusters.
 
-```
-        env:
-          - name: username
-            value: "root" 
-          - name: password
-            value: "mypassword"            
-          - name: address
-            value: "mysql.cluster:3306"
-          - name: plaintext_connection_allowed
-            value: "true"
-          - name: ha_enabled
-            value: "true"            
-```
+## Development and Contribution
 
-# Usage
-
-Examples can be found in the `examples` directory of the project. 
-
-## Example 1: Build a microservice and create the microservice image on git push on the master branch 
-
-1. Create the example namespace `jq-example-git`. In this namespace are deployed all the examples: 
-
- `kubectl create ns jq-example-git`
-
-2. Deploy the `gitrepository.yaml`. The `GitRepository` resource clones a branch for given git repository: 
-
-```
-$ kubectl apply -f examples/create-pipeline-on-git-push/gitrepository.yaml
-$ kubectl describe gitrepository microservice-code-repo -n jq-example-git
-Name:         microservice-code-repo
-Namespace:    jq-example-git
-...
-Events:
-  Type    Reason  Age   From               Message
-  ----    ------  ----  ----               -------
-  Normal  info    17s   source-controller  Fetched revision: main/03da4fdbf8f3e027fb56dd0d96244c951a24f2b4
-```
-
-3. Deploy the `tekton-pipelines.yaml`. This a dummy tekton pipeline, which is started when the `GitRepository` detects new commits: 
-
- `kubectl apply -f examples/create-pipeline-on-git-push/tekton-pipelines.yaml`
-
-4. Deploy the `pipelinetrigger.yaml`:
-
- ```
- $ kubectl apply -f examples/create-pipeline-on-git-push/pipelinetrigger.yaml
- pipelinetrigger.pipeline.jquad.rocks/pipelinetrigger-for-git-project created
- $ kubectl describe pipelinetrigger pipelinetrigger-for-git-project -n jq-example-git
-Name:         pipelinetrigger-for-git-project
-Namespace:    jq-example-git
-...
-Status:
-  Conditions:
-    Last Transition Time:  2022-01-12T15:40:26Z
-    Message:
-    Observed Generation:   1
-    Reason:                Succeded
-    Status:                True
-    Type:                  Success
-  Latest Event:            main/03da4fdbf8f3e027fb56dd0d96244c951a24f2b4
-  Latest Pipeline Run:     pipelinetrigger-for-git-project-mkfx
-Events:
-  Type    Reason  Age   From             Message
-  ----    ------  ----  ----             -------
-  Normal  Info    65s   PipelineTrigger  Source microservice-code-repo in namespace jq-example-git got new event main/03da4fdbf8f3e027fb56dd0d96244c951a24f2b4
- ```
-
-5. The `PipelineRun` was successfully created: 
-
-```
-$ kubectl get pipelineruns -n jq-example-git
-NAME                                   SUCCEEDED   REASON      STARTTIME   COMPLETIONTIME
-pipelinetrigger-for-git-project-mkfx   True        Succeeded   2m41s       2m29s
-```
-
-## Example 2: Build a microservice and create the microservice image when a new base image version is released (`FROM` instruction in the `Dockerfile`)
-
-1. Create the example namespace `jq-example-image`. In this namespace are deployed all the examples: 
-
- `kubectl create ns jq-example-image`
-
-2. Deploy the `imagerepository.yaml`. The `ImageRepository` resource fetches the tags for a given container registry: 
-
- `kubectl apply -f examples/create-pipeline-on-image-update/imagerepository.yaml`
-
-3. Deploy the `imagepolicy.yaml`. The `ImagePolicy` resource selects the latest tag for the list of images acquired by the `ImageRepository` resource according to defined criteria: 
-
- `kubectl apply -f examples/create-pipeline-on-image-update/imagepolicy.yaml`
-
-4. Deploy the `tekton-pipelines.yaml`. This a dummy tekton pipeline, which is started when the `ImagePolicy` resource creates a new event: 
-
- `kubectl apply -f examples/create-pipeline-on-image-update/tekton-pipelines.yaml`
-
-5. Deploy the `pipelinetrigger.yaml`:
-
- `kubectl apply -f examples/create-pipeline-on-image-update/pipelinetrigger.yaml`
-
-# Development / Contribution
-
-## Build and run locally 
+### Build and run locally 
 
 In order to build the project, run `make`.
 
-Run the ginkgo tests with `make test`.
+Run the tests with `make test`.
 
-If the API source files are changed, the command `make manifests` needs to be run.
+If the API source files change, run `make manifests`.
 
 Run the project locally by `make deploy`.
 
-## Build the container image 
+### Build the container image 
 
 Build the container image using `docker build . --tag pipeline-trigger-operator` (implicitly builds the operator)
 
