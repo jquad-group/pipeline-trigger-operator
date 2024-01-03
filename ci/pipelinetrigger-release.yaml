@@ -9,7 +9,7 @@ spec:
     kind: GitRepository
     name: pipeline-trigger-operator
   pipelineRun:
-    apiVersion: tekton.dev/v1beta1
+    apiVersion: tekton.dev/v1
     kind: PipelineRun
     metadata:
       generateName: pipeline-trigger-operator-release-
@@ -19,12 +19,13 @@ spec:
     spec:        
       pipelineRef:
         name: release-pipeline-go
-      serviceAccountName: build-robot
-      podTemplate:
-        securityContext:
-          fsGroup: 0
-          runAsGroup: 0
-          runAsUser: 0
+      taskRunTemplate:
+        podTemplate:
+          securityContext:
+            fsGroup: 0
+            runAsGroup: 0
+            runAsUser: 0
+        serviceAccountName: build-robot
       workspaces:
       - name: workspace
         volumeClaimTemplate:
