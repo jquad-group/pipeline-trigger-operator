@@ -35,8 +35,7 @@ spec:
             resources:
               requests:
                 storage: 1Gi
-            storageClassName: hcloud-volumes
-            volumeMode: Filesystem
+            storageClassName: local-path
       params:
         - name: imageLocation
           value: harbor.jquad.rocks/library
