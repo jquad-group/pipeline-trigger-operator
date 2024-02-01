@@ -3,20 +3,27 @@
 [![Go Report Card](https://goreportcard.com/badge/jquad-group/pipeline-trigger-operator)](https://goreportcard.com/report/jquad-group/pipeline-trigger-operator)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/jquad-group/pipeline-trigger-operator/blob/main/LICENSE)
 
-- [Overview](#overview)
-- [Features](#features)
-- [Prerequisites](#prerequisites)
-  - [Installation](#installation)
-  - [Installation with Monitoring Support](#installation-with-monitoring-support)
-- [Specification](#specification)
-- [Usage](#usage)
-  - [Example 1: Build a Microservice Image on Git Push](#example-1-build-a-microservice-image-on-git-push)
-  - [Example 2: Build a Microservice Image on New Base Image Release](#example-2-build-a-microservice-image-on-new-base-image-release)
-  - [Example 3: Build a Microservice Image on New Pull Request](#example-3-build-a-microservice-image-on-new-pull-request)  
-- [Advanced Usage](#advanced-usage)
-  - [Dynamic Input Parameters](#dynamic-input-parameters)
-  - [Dual Cluster Deployment](#dual-cluster-deployment)
-- [Development and Contribution](#development-and-contribution)
+- [Pipeline Trigger Operator](#pipeline-trigger-operator)
+  - [Overview](#overview)
+  - [AI Engineer](#ai-engineer)
+  - [Features](#features)
+  - [Prerequisites](#prerequisites)
+    - [Installation](#installation)
+    - [Installation with Monitoring Support](#installation-with-monitoring-support)
+  - [Specification](#specification)
+  - [Usage](#usage)
+    - [Example 1: Build a Microservice Image on Git Push](#example-1-build-a-microservice-image-on-git-push)
+    - [Example 2: Build a Microservice Image on New Base Image Release](#example-2-build-a-microservice-image-on-new-base-image-release)
+    - [Example 3: Build a Microservice Image on New Pull Request](#example-3-build-a-microservice-image-on-new-pull-request)
+  - [Advanced Usage](#advanced-usage)
+    - [Dynamic Input Parameters](#dynamic-input-parameters)
+      - [Example: Starting a PipelineRun on Events from PullRequest](#example-starting-a-pipelinerun-on-events-from-pullrequest)
+      - [Example: Starting a PipelineRun on Events from GitRepository](#example-starting-a-pipelinerun-on-events-from-gitrepository)
+      - [Example: Starting a PipelineRun on Events from ImagePolicy](#example-starting-a-pipelinerun-on-events-from-imagepolicy)
+    - [Dual Cluster Deployment](#dual-cluster-deployment)
+  - [Development and Contribution](#development-and-contribution)
+    - [Build and run locally](#build-and-run-locally)
+    - [Build the container image](#build-the-container-image)
 
 ## Overview
 
@@ -27,6 +34,12 @@ The operator runs on [Kubernetes](https://kubernetes.io/docs/home/) and seamless
 [Short video with the components overview](https://www.youtube.com/watch?v=3TmczsYnDNc)
 
 ![Workflow](https://github.com/jquad-group/pipeline-trigger-operator/blob/main/img/pipeline-trigger-operator.svg)
+
+## AI Engineer
+
+![Logo](https://github.com/jquad-group/pipeline-trigger-operator/blob/main/img/logo.png)
+
+Still wondering what the pipeline-trigger-operator does or what a reactive pipeline actually is? Our AI Engineer got you covered! **It's mission is simple and it's purpose is clear**:  guide you to the highest level of build pipeline efficiency. Our **'Reactive CI/CD Pipeline Engineer'**, is here to offer expert advice and insights on setting up and managing these pipelines, with a focus on integrating the *pipeline-trigger-operator* and optionally - the *pullrequest-operator*. Whether you're a seasoned developer or new to this domain, our AI Engineer is ready to help you navigate and excel in reactive CI/CD. So, feel free to [reach out to it with your queries](https://chat.openai.com/g/g-2dst34wup-reactive-ci-cd-pipeline-engineer) related to our project!
 
 ## Features
 
