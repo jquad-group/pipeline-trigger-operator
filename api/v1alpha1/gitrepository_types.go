@@ -20,16 +20,16 @@ const (
 )
 
 type GitRepository struct {
-	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Optional
 	BranchName string `json:"branchName,omitempty"`
 
-	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Optional
 	CommitId string `json:"commitId,omitempty"`
 
-	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Optional
 	RepositoryName string `json:"repositoryName,omitempty"`
 
-	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Optional
 	LatestPipelineRun string `json:"latestPipelineRun,omitempty"`
 
 	Details string `json:"details,omitempty"`

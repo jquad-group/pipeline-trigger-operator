@@ -16,9 +16,19 @@ rules:
   - update
   - watch
 - apiGroups:
-  - image.toolkit.fluxcd.io
+  - ""
   resources:
-  - imagepolicies
+  - secrets
+  - serviceaccounts
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - credentials.jquad.rocks
+  resources:
+  - managedcredentials
+  - managedcredentials/status
   verbs:
   - get
   - list
@@ -26,6 +36,7 @@ rules:
 - apiGroups:
   - image.toolkit.fluxcd.io
   resources:
+  - imagepolicies
   - imagepolicies/status
   verbs:
   - get
@@ -61,13 +72,6 @@ rules:
   - pipeline.jquad.rocks
   resources:
   - pullrequests
-  verbs:
-  - get
-  - list
-  - watch
-- apiGroups:
-  - pipeline.jquad.rocks
-  resources:
   - pullrequests/status
   verbs:
   - get
@@ -77,13 +81,6 @@ rules:
   - source.toolkit.fluxcd.io
   resources:
   - gitrepositories
-  verbs:
-  - get
-  - list
-  - watch
-- apiGroups:
-  - source.toolkit.fluxcd.io
-  resources:
   - gitrepositories/status
   verbs:
   - get
@@ -93,17 +90,6 @@ rules:
   - tekton.dev
   resources:
   - pipelineruns
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - tekton.dev
-  resources:
   - pipelines
   verbs:
   - create

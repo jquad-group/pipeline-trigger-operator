@@ -17,4 +17,4 @@ resources:
   kind: PipelineTrigger
   path: github.com/jquad-group/pipeline-trigger-operator/api/v1alpha1
   version: v1alpha1
-version: "3"
+version: "4"

@@ -97,8 +97,12 @@ There are two additional resources that the controller needs to have access to, 
 //+kubebuilder:rbac:groups=image.toolkit.fluxcd.io,resources=imagepolicies/status,verbs=get;list;watch
 //+kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=gitrepositories,verbs=get;list;watch
 //+kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=gitrepositories/status,verbs=get;list;watch
+//+kubebuilder:rbac:groups=credentials.jquad.rocks,resources=managedcredentials,verbs=get;list;watch
+//+kubebuilder:rbac:groups=credentials.jquad.rocks,resources=managedcredentials/status,verbs=get;list;watch
 //+kubebuilder:rbac:groups=tekton.dev,resources=pipelineruns,verbs=get;list;watch;create;delete;patch;update
 //+kubebuilder:rbac:groups=tekton.dev,resources=pipelines,verbs=get;list;watch;create;delete;patch;update
+//+kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=get;list;watch
+//+kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
 //+kubebuilder:rbac:groups="",resources=events,verbs=create;patch;update;get;list;watch
 
 /*
@@ -198,6 +202,24 @@ func (r *PipelineTriggerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		}
 		// Create the PipelineRun resources
 		prs := sourceSubscriber.CreatePipelineRunResource(&pipelineTrigger, r.Scheme)
+
+		// Apply ManagedCredential settings if referenced
+		managedCred, err := pipelineTrigger.GetManagedCredential(ctx, r.Client)
+		if err != nil {
+			credRefName := "unknown"
+			if pipelineTrigger.Spec.CredentialsRef != nil {
+				credRefName = pipelineTrigger.Spec.CredentialsRef.Name
+			}
+			log.Error(err, "Failed to get ManagedCredential", "namespace", pipelineTrigger.Namespace, "name", credRefName)
+			r.recorder.Event(&pipelineTrigger, core.EventTypeWarning, "Warning", "Failed to get ManagedCredential: "+err.Error())
+		} else if managedCred != nil {
+			// Apply ManagedCredential settings to each PipelineRun
+			for i := range prs {
+				pipelineTrigger.ApplyManagedCredentialToPipelineRun(prs[i], managedCred)
+			}
+			log.Info("Applied ManagedCredential settings", "namespace", pipelineTrigger.Namespace, "name", pipelineTrigger.Spec.CredentialsRef.Name)
+		}
+
 		// Start the PipelineRun resources
 		for pipelineRunCnt := 0; pipelineRunCnt < len(prs); pipelineRunCnt++ {
 			instanceName, _, errRun := pipelineTrigger.StartPipelineRun(prs[pipelineRunCnt], ctx, req, r.Client)

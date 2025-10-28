@@ -22,6 +22,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/jquad-group/pipeline-trigger-operator/pkg/credentials"
 	"github.com/jquad-group/pipeline-trigger-operator/pkg/json"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -59,6 +60,21 @@ type PipelineTriggerSpec struct {
 	// +kubebuilder:validation:Schemaless
 	// +kubebuilder:pruning:PreserveUnknownFields
 	PipelineRun unstructured.Unstructured `json:"pipelineRun"`
+
+	// CredentialsRef references a ManagedCredential for pipeline authentication by friendly name
+	// +optional
+	CredentialsRef *CredentialsRef `json:"credentialsRef,omitempty"`
+}
+
+// CredentialsRef references a ManagedCredential by name and optional namespace
+type CredentialsRef struct {
+	// Name of the ManagedCredential to reference
+	// +kubebuilder:validation:Required
+	Name string `json:"name"`
+
+	// Namespace of the ManagedCredential (optional, defaults to PipelineTrigger namespace)
+	// +optional
+	Namespace string `json:"namespace,omitempty"`
 }
 
 type Param struct {
@@ -417,4 +433,69 @@ func ConvertStringMapToInterfaceMap(inputMap map[string]string) map[string]inter
 		result[key] = value
 	}
 	return result
+}
+
+// GetManagedCredential retrieves the referenced ManagedCredential
+func (pipelineTrigger *PipelineTrigger) GetManagedCredential(ctx context.Context, c client.Client) (*credentials.ManagedCredential, error) {
+	if pipelineTrigger.Spec.CredentialsRef == nil {
+		return nil, nil
+	}
+
+	// Determine the namespace to use
+	namespace := pipelineTrigger.Spec.CredentialsRef.Namespace
+	if namespace == "" {
+		namespace = pipelineTrigger.Namespace // Default to PipelineTrigger namespace
+	}
+
+	managedCred := &credentials.ManagedCredential{}
+	err := c.Get(ctx, client.ObjectKey{
+		Name:      pipelineTrigger.Spec.CredentialsRef.Name,
+		Namespace: namespace,
+	}, managedCred)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return managedCred, nil
+}
+
+// ApplyManagedCredentialToPipelineRun applies the ManagedCredential's service account and workspaces to the PipelineRun
+func (pipelineTrigger *PipelineTrigger) ApplyManagedCredentialToPipelineRun(pr *unstructured.Unstructured, managedCred *credentials.ManagedCredential) {
+	if managedCred == nil {
+		return
+	}
+
+	// Get the spec from PipelineRun
+	spec, specFound := pr.Object["spec"].(map[string]interface{})
+	if !specFound {
+		spec = make(map[string]interface{})
+		pr.Object["spec"] = spec
+	}
+
+	// Apply service account from ManagedCredential status
+	if managedCred.Status.ServiceAccountRef != nil {
+		spec["serviceAccountName"] = managedCred.Status.ServiceAccountRef.Name
+	}
+
+	// Apply workspace for secret if SecretRef exists
+	if managedCred.Status.SecretRef != nil {
+		// Get existing workspaces or create new slice
+		var workspaces []interface{}
+		if existingWorkspaces, ok := spec["workspaces"].([]interface{}); ok {
+			workspaces = existingWorkspaces
+		}
+
+		// Create secret workspace
+		secretWorkspace := map[string]interface{}{
+			"name": managedCred.Status.SecretRef.Name,
+			"secret": map[string]interface{}{
+				"secretName": managedCred.Status.SecretRef.Name,
+			},
+		}
+
+		// Append the new workspace
+		workspaces = append(workspaces, secretWorkspace)
+		spec["workspaces"] = workspaces
+	}
 }

@@ -20,16 +20,16 @@ const (
 
 type ImagePolicy struct {
 
-	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Optional
 	RepositoryName string `json:"repositoryName,omitempty"`
 
-	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Optional
 	ImageName string `json:"imageName,omitempty"`
 
-	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Optional
 	ImageVersion string `json:"imageVersion,omitempty"`
 
-	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Optional
 	LatestPipelineRun string `json:"latestPipelineRun,omitempty"`
 
 	Details string `json:"details,omitempty"`

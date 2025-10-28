@@ -72,8 +72,20 @@ spec:
                     - Github
                     type: string
                   secretRef:
-                    description: Git Provider credentials
+                    description: Git Provider credentials (deprecated - use managedCredentialRef instead)
                     type: string
+                  managedCredentialRef:
+                    description: ManagedCredential reference for Git Provider credentials
+                    properties:
+                      name:
+                        description: Name of the ManagedCredential to reference
+                        type: string
+                      namespace:
+                        description: Namespace of the ManagedCredential (optional, defaults to PullRequest namespace)
+                        type: string
+                    required:
+                    - name
+                    type: object
                 required:
                 - provider
                 type: object

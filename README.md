@@ -16,6 +16,9 @@
     - [Example 2: Build a Microservice Image on New Base Image Release](#example-2-build-a-microservice-image-on-new-base-image-release)
     - [Example 3: Build a Microservice Image on New Pull Request](#example-3-build-a-microservice-image-on-new-pull-request)
   - [Advanced Usage](#advanced-usage)
+    - [Managed Credentials](#managed-credentials)
+      - [Overview](#managed-credentials-overview)
+      - [Example: Using ManagedCredential with PipelineTrigger](#example-using-managedcredential-with-pipelinetrigger)
     - [Dynamic Input Parameters](#dynamic-input-parameters)
       - [Example: Starting a PipelineRun on Events from PullRequest](#example-starting-a-pipelinerun-on-events-from-pullrequest)
       - [Example: Starting a PipelineRun on Events from GitRepository](#example-starting-a-pipelinerun-on-events-from-gitrepository)
@@ -46,6 +49,7 @@ Still wondering what the pipeline-trigger-operator does or what a reactive pipel
 - Automated creation of Tekton `PipelineRuns` in response to events from Flux and Pull Request Operator resources.
 - Works with `GitRepository`, `ImagePolicy`, and `PullRequest` resources.
 - Dynamically configurable `PipelineRun` input parameters using JSON path expressions.
+- **Managed Credentials** - Simplified credential management for Tekton pipelines with automatic Secret and ServiceAccount creation.
 - Monitoring support with Prometheus, Grafana, and a dedicated dashboard.
 
 ## Prerequisites
@@ -140,6 +144,12 @@ spec:
         value: "https://github.com/my-project.git"
       - name: "image-name"
         value: "main" # or JSON path expression, e.g. $.imageName
+  # Optional: Reference to a ManagedCredential for authentication
+  managedCredentialRef:
+    apiVersion: v1
+    kind: ManagedCredential
+    name: github-credential
+    namespace: jq-example-namespace
 ```
 
 ## Usage
@@ -235,6 +245,112 @@ The PipelineRun will be created automatically, when new base image is released.
 The PipelineRun will be created automatically, when new pull requests are detected.
 
 ## Advanced Usage
+
+### Managed Credentials
+
+#### Overview
+
+The **ManagedCredential** feature simplifies credential management for Tekton pipelines by automatically creating and managing Kubernetes Secrets and ServiceAccounts with proper Tekton annotations.
+
+**Benefits:**
+- Automatic conversion of raw tokens to Tekton-compatible Secrets
+- Proper annotation handling for different credential types (Git, Docker Registry, Cloud Provider)
+- Automatic ServiceAccount creation and linking
+- Simplified credential rotation and management
+
+**ManagedCredential Specification:**
+
+```yaml
+apiVersion: v1
+kind: ManagedCredential
+metadata:
+  name: github-credential
+  namespace: jq-example-namespace
+spec:
+  # Type of credential: git, docker-registry, cloud-provider, or generic
+  credentialType: git
+  # Provider for Tekton annotations (e.g., github.com, gitlab.com, docker.io)
+  provider: github.com
+  # Reference to the Secret containing the raw token
+  tokenSecretRef:
+    name: github-token-secret
+    namespace: jq-example-namespace
+  # Optional: Human-readable description
+  description: "GitHub credentials for CI/CD pipelines"
+  # Optional: Customize the generated Secret
+  secretTemplate:
+    labels:
+      app: ci-cd
+    annotations:
+      custom: annotation
+  # Optional: Customize the generated ServiceAccount
+  serviceAccountTemplate:
+    labels:
+      app: ci-cd
+```
+
+#### Example: Using ManagedCredential with PipelineTrigger
+
+1. Create a Secret containing your raw token:
+
+```shell
+kubectl create secret generic github-token-secret \
+  --from-literal=token=ghp_your_github_token_here \
+  -n jq-example-namespace
+```
+
+2. Create a ManagedCredential:
+
+```yaml
+apiVersion: v1
+kind: ManagedCredential
+metadata:
+  name: github-credential
+  namespace: jq-example-namespace
+spec:
+  credentialType: git
+  provider: github.com
+  tokenSecretRef:
+    name: github-token-secret
+    namespace: jq-example-namespace
+  description: "GitHub credentials for pipeline authentication"
+```
+
+3. Reference the ManagedCredential in your PipelineTrigger:
+
+```yaml
+apiVersion: pipeline.jquad.rocks/v1alpha1
+kind: PipelineTrigger
+metadata:
+  name: pipelinetrigger-with-credentials
+  namespace: jq-example-namespace
+spec:
+  source:
+    apiVersion: source.toolkit.fluxcd.io/v1
+    kind: GitRepository
+    name: my-repo
+  managedCredentialRef:
+    apiVersion: v1
+    kind: ManagedCredential
+    name: github-credential
+    namespace: jq-example-namespace
+  pipelineRun:
+    apiVersion: tekton.dev/v1
+    kind: PipelineRun
+    metadata:
+      generateName: authenticated-pipeline-
+    spec:
+      pipelineRef:
+        name: build-pipeline
+      params:
+      - name: repo-url
+        value: "https://github.com/my-org/my-repo.git"
+```
+
+The operator will automatically:
+- Apply the ServiceAccount from the ManagedCredential to the PipelineRun
+- Add the credential Secret as a workspace to the PipelineRun
+- Handle proper Tekton annotations for authentication
 
 ### Dynamic Input Parameters
 
