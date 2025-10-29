@@ -89,7 +89,16 @@ func (gitrepositorySubscriber GitrepositorySubscriber) CalculateCurrentState(sec
 	gitRepository.GetGitRepository(*foundSource)
 	gitRepository.GenerateDetails()
 	gitRepositoryLabels := gitRepository.GenerateGitRepositoryLabelsAsHash()
-	gitRepositoryLabels["tekton.dev/pipeline"] = pipelineTrigger.Spec.PipelineRun.Object["spec"].(map[string]interface{})["pipelineRef"].(map[string]interface{})["name"].(string)
+
+	// Safely extract pipeline name with nil checks
+	if spec, ok := pipelineTrigger.Spec.PipelineRun.Object["spec"].(map[string]interface{}); ok && spec != nil {
+		if pipelineRef, ok := spec["pipelineRef"].(map[string]interface{}); ok && pipelineRef != nil {
+			if name, ok := pipelineRef["name"].(string); ok && name != "" {
+				gitRepositoryLabels["tekton.dev/pipeline"] = name
+			}
+		}
+	}
+
 	for i := range pipelineRunList.Items {
 		if gitrepositorySubscriber.HasIntersection(gitRepositoryLabels, pipelineRunList.Items[i].GetLabels()) {
 			return true, false, nil
