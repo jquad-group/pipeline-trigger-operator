@@ -70,11 +70,13 @@ func TestImagePolicy_Equals(t *testing.T) {
 }
 
 func TestGetRepositoryName(t *testing.T) {
-	latestImage := "ghcr.io/repo/my:v1.0"
 	fluxImagePol := unstructured.Unstructured{}
 	fluxImagePol.Object = map[string]interface{}{
 		"status": map[string]interface{}{
-			"latestImage": latestImage,
+			"latestRef": map[string]interface{}{
+				"name": "ghcr.io/repo/my",
+				"tag":  "v1.0",
+			},
 		},
 	}
 
@@ -86,11 +88,13 @@ func TestGetRepositoryName(t *testing.T) {
 }
 
 func TestGetImageName(t *testing.T) {
-	latestImage := "ghcr.io/repo/my:v1.0"
 	fluxImagePol := unstructured.Unstructured{}
 	fluxImagePol.Object = map[string]interface{}{
 		"status": map[string]interface{}{
-			"latestImage": latestImage,
+			"latestRef": map[string]interface{}{
+				"name": "ghcr.io/repo/my",
+				"tag":  "v1.0",
+			},
 		},
 	}
 
@@ -102,11 +106,13 @@ func TestGetImageName(t *testing.T) {
 }
 
 func TestGetImageVersion(t *testing.T) {
-	latestImage := "ghcr.io/repo/my:v1.0"
 	fluxImagePol := unstructured.Unstructured{}
 	fluxImagePol.Object = map[string]interface{}{
 		"status": map[string]interface{}{
-			"latestImage": latestImage,
+			"latestRef": map[string]interface{}{
+				"name": "ghcr.io/repo/my",
+				"tag":  "v1.0",
+			},
 		},
 	}
 
@@ -118,11 +124,13 @@ func TestGetImageVersion(t *testing.T) {
 }
 
 func TestImagePolicy_GetImagePolicy(t *testing.T) {
-	latestImage := "ghcr.io/repo/my:v1.0"
 	fluxImagePol := unstructured.Unstructured{}
 	fluxImagePol.Object = map[string]interface{}{
 		"status": map[string]interface{}{
-			"latestImage": latestImage,
+			"latestRef": map[string]interface{}{
+				"name": "ghcr.io/repo/my",
+				"tag":  "v1.0",
+			},
 		},
 	}
 

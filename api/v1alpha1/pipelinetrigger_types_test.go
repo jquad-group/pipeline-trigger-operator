@@ -486,7 +486,7 @@ func TestCreatePipelineRunResource(t *testing.T) {
 	pipelineTriggerImage := &PipelineTrigger{
 		Spec: PipelineTriggerSpec{
 			Source: Source{
-				APIVersion: "image.toolkit.fluxcd.io/v1beta2",
+				APIVersion: "image.toolkit.fluxcd.io/v1",
 				Kind:       "ImagePolicy",
 				Name:       "test-image-policy",
 			},

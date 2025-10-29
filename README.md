@@ -104,7 +104,7 @@ spec:
   # Source can be ImagePolicy, GitRepository, or PullRequest
   # The operator subscribes for events from these resources
   source: 
-    apiVersion: image.toolkit.fluxcd.io/v1beta2
+    apiVersion: image.toolkit.fluxcd.io/v1
     kind: ImagePolicy
     name: latest-image-notifier
   # The Tekton PipelineRun

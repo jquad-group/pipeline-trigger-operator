@@ -38,7 +38,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	imagereflectorv1 "github.com/fluxcd/image-reflector-controller/api/v1beta2"
+	imagereflectorv1 "github.com/fluxcd/image-reflector-controller/api/v1"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	pullrequestv1alpha1 "github.com/jquad-group/pullrequest-operator/api/v1alpha1"
 	tektondevv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"

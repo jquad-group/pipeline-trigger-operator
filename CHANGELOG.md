@@ -1,0 +1,35 @@
+# Changelog
+
+All notable changes to the Pipeline Trigger Operator will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+### Changed
+- **BREAKING**: Upgraded Flux Image Automation APIs from `v1beta2` to `v1` (GA release)
+- Updated `github.com/fluxcd/image-reflector-controller/api` from v0.29.1 to v1.0.3
+- Updated `github.com/fluxcd/source-controller/api` from v1.0.1 to v1.7.3
+- Updated `github.com/fluxcd/pkg/apis/meta` from v1.1.1 to v1.22.0
+- Upgraded Go toolchain from 1.24.0 to 1.25.0
+- Updated all example YAML files to use `image.toolkit.fluxcd.io/v1` API version
+- Updated Flux CRDs to latest versions from Flux v2.7
+
+### Fixed
+- Updated ImagePolicy field access to use new `latestRef` structure instead of deprecated `latestImage`
+- Updated Artifact type references to use `meta.Artifact` with required `digest` field
+- Fixed all unit tests to work with new API structures
+
+### Migration Notes
+- ImagePolicy resources must be updated from `apiVersion: image.toolkit.fluxcd.io/v1beta2` to `v1`
+- ImageRepository resources must be updated from `apiVersion: image.toolkit.fluxcd.io/v1beta2` to `v1`
+- The ImagePolicy status now uses `latestRef.name` and `latestRef.tag` instead of `latestImage`
+
+### Compatibility
+- Requires Flux v2.7 or later
+- Compatible with Kubernetes 1.27+
+- Tekton Pipelines v1+
+
+---
+

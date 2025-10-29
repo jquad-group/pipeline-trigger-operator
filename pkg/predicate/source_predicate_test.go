@@ -3,6 +3,7 @@ package predicate
 import (
 	"testing"
 
+	"github.com/fluxcd/pkg/apis/meta"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 )
@@ -12,7 +13,7 @@ func TestSourceRevisionChangePredicateUpdate(t *testing.T) {
 	oldSource := &sourcev1.GitRepository{
 		// Create a sample artifact with a revision
 		Status: sourcev1.GitRepositoryStatus{
-			Artifact: &sourcev1.Artifact{
+			Artifact: &meta.Artifact{
 				Revision: "revision1",
 			},
 		},
@@ -22,7 +23,7 @@ func TestSourceRevisionChangePredicateUpdate(t *testing.T) {
 	newSource := &sourcev1.GitRepository{
 		// Create a sample artifact with a different revision
 		Status: sourcev1.GitRepositoryStatus{
-			Artifact: &sourcev1.Artifact{
+			Artifact: &meta.Artifact{
 				Revision: "revision2",
 			},
 		},
@@ -51,7 +52,7 @@ func TestSourceRevisionChangePredicateNoChange(t *testing.T) {
 	oldSource := &sourcev1.GitRepository{
 		// Create a sample artifact with a revision
 		Status: sourcev1.GitRepositoryStatus{
-			Artifact: &sourcev1.Artifact{
+			Artifact: &meta.Artifact{
 				Revision: "revision1",
 			},
 		},
@@ -61,7 +62,7 @@ func TestSourceRevisionChangePredicateNoChange(t *testing.T) {
 	newSource := &sourcev1.GitRepository{
 		// Create a sample artifact with the same revision
 		Status: sourcev1.GitRepositoryStatus{
-			Artifact: &sourcev1.Artifact{
+			Artifact: &meta.Artifact{
 				Revision: "revision1",
 			},
 		},
@@ -90,7 +91,7 @@ func TestSourceRevisionChangePredicateCreate(t *testing.T) {
 	newSource := &sourcev1.GitRepository{
 		// Create a sample artifact with a revision
 		Status: sourcev1.GitRepositoryStatus{
-			Artifact: &sourcev1.Artifact{
+			Artifact: &meta.Artifact{
 				Revision: "revision1",
 			},
 		},
@@ -118,7 +119,7 @@ func TestSourceRevisionChangePredicateDelete(t *testing.T) {
 	oldSource := &sourcev1.GitRepository{
 		// Create a sample artifact with a revision
 		Status: sourcev1.GitRepositoryStatus{
-			Artifact: &sourcev1.Artifact{
+			Artifact: &meta.Artifact{
 				Revision: "revision1",
 			},
 		},

@@ -5,7 +5,7 @@ metadata:
   namespace: jq-example-image
 spec:
   source: 
-    apiVersion: image.toolkit.fluxcd.io/v1beta2
+    apiVersion: image.toolkit.fluxcd.io/v1
     kind: ImagePolicy
     name: latest-image-notifier
   pipelineRun:

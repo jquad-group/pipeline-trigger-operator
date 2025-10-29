@@ -2,7 +2,6 @@ package v1alpha1
 
 import (
 	"encoding/json"
-	"fmt"
 	"sort"
 	"strings"
 
@@ -73,26 +72,24 @@ func (imagePolicy *ImagePolicy) GetImagePolicy(fluxImagePolicy unstructured.Unst
 }
 
 func getRepositoryName(fluxImagePolicy unstructured.Unstructured) string {
-	repositoryPath := fluxImagePolicy.Object["status"].(map[string]interface{})["latestImage"].(string)
-	repositoryPathStr := fmt.Sprintf("%v", repositoryPath)
-	pathSubdirSize := len(strings.Split(repositoryPathStr, imageNameDelimeter))
-	repositoryName := strings.Split(repositoryPathStr, imageNameDelimeter)[pathSubdirSize-2]
+	latestRef := fluxImagePolicy.Object["status"].(map[string]interface{})["latestRef"].(map[string]interface{})
+	imageName := latestRef["name"].(string)
+	pathSubdirSize := len(strings.Split(imageName, imageNameDelimeter))
+	repositoryName := strings.Split(imageName, imageNameDelimeter)[pathSubdirSize-2]
 	return repositoryName
 }
 
 func getImageName(fluxImagePolicy unstructured.Unstructured) string {
-	repositoryPath := fluxImagePolicy.Object["status"].(map[string]interface{})["latestImage"].(string)
-	repositoryPathStr := fmt.Sprintf("%v", repositoryPath)
-	pathSubdirSize := len(strings.Split(repositoryPathStr, imageNameDelimeter))
-	imageNameWithVersion := strings.Split(repositoryPathStr, imageNameDelimeter)[pathSubdirSize-1]
-	imageName := strings.Split(imageNameWithVersion, imageVersionDelimeter)[imageNamePosition]
-	return imageName
+	latestRef := fluxImagePolicy.Object["status"].(map[string]interface{})["latestRef"].(map[string]interface{})
+	imageName := latestRef["name"].(string)
+	pathSubdirSize := len(strings.Split(imageName, imageNameDelimeter))
+	imageNameOnly := strings.Split(imageName, imageNameDelimeter)[pathSubdirSize-1]
+	return imageNameOnly
 }
 
 func getImageVersion(fluxImagePolicy unstructured.Unstructured) string {
-	repositoryPath := fluxImagePolicy.Object["status"].(map[string]interface{})["latestImage"].(string)
-	repositoryPathStr := fmt.Sprintf("%v", repositoryPath)
-	imageVersion := strings.Split(repositoryPathStr, imageVersionDelimeter)[imageVersionPosition]
+	latestRef := fluxImagePolicy.Object["status"].(map[string]interface{})["latestRef"].(map[string]interface{})
+	imageVersion := latestRef["tag"].(string)
 	return imageVersion
 }
 

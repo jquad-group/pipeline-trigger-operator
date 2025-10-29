@@ -21,7 +21,7 @@ import (
 	"errors"
 	"strings"
 
-	imagereflectorv1 "github.com/fluxcd/image-reflector-controller/api/v1beta2"
+	imagereflectorv1 "github.com/fluxcd/image-reflector-controller/api/v1"
 
 	"github.com/go-logr/logr"
 

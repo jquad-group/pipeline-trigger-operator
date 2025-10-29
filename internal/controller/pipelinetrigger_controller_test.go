@@ -20,7 +20,7 @@ import (
 	"fmt"
 	"time"
 
-	imagereflectorv1 "github.com/fluxcd/image-reflector-controller/api/v1beta2"
+	imagereflectorv1 "github.com/fluxcd/image-reflector-controller/api/v1"
 	"github.com/fluxcd/pkg/apis/meta"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	. "github.com/onsi/ginkgo/v2"
@@ -477,10 +477,11 @@ var _ = Describe("PipelineTrigger controller", func() {
 
 			By("Updating the GitRepository status")
 			gitRepoStatus := sourcev1.GitRepositoryStatus{
-				Artifact: &sourcev1.Artifact{
+				Artifact: &meta.Artifact{
 					Path:           "gitrepository/flux-system/flux-system/dc0fd09d0915f47cbda5f235a8a9c30b2d8baa69.tar.gz",
 					URL:            "http://source-controller.flux-system.svc.cluster.local./gitrepository/flux-system/flux-system/dc0fd09d0915f47cbda5f235a8a9c30b2d8baa69.tar.gz",
 					Revision:       "main@sha1:dc0fd09d0915f47cbda5f235a8a9c30b2d8baa69",
+					Digest:         "sha256:dc0fd09d0915f47cbda5f235a8a9c30b2d8baa69",
 					LastUpdateTime: v1.Now(),
 				},
 				Conditions: []v1.Condition{
@@ -506,10 +507,11 @@ var _ = Describe("PipelineTrigger controller", func() {
 			Eventually(func() error {
 				if createdGitRepository.Status.Artifact != nil && len(createdGitRepository.Status.Artifact.Revision) != 0 {
 					latestStatusArtifact := createdGitRepository.Status.Artifact
-					expectedLatestStatusArtifact := &sourcev1.Artifact{
+					expectedLatestStatusArtifact := &meta.Artifact{
 						Path:     "gitrepository/flux-system/flux-system/dc0fd09d0915f47cbda5f235a8a9c30b2d8baa69.tar.gz",
 						URL:      "http://source-controller.flux-system.svc.cluster.local./gitrepository/flux-system/flux-system/dc0fd09d0915f47cbda5f235a8a9c30b2d8baa69.tar.gz",
 						Revision: "main@sha1:dc0fd09d0915f47cbda5f235a8a9c30b2d8baa69",
+						Digest:   "sha256:dc0fd09d0915f47cbda5f235a8a9c30b2d8baa69",
 					}
 					if latestStatusArtifact.URL != expectedLatestStatusArtifact.URL && latestStatusArtifact.Path != expectedLatestStatusArtifact.Path && latestStatusArtifact.Revision != expectedLatestStatusArtifact.Revision {
 						return fmt.Errorf("The latest status artifact added to the GitRepository instance is not as expected")
@@ -799,7 +801,10 @@ var _ = Describe("PipelineTrigger controller", func() {
 
 			By("Updating the ImagePolicy status")
 			imagePolicyStatus := imagereflectorv1.ImagePolicyStatus{
-				LatestImage: "ghcr.io/test/test:v0.0.1",
+				LatestRef: &imagereflectorv1.ImageRef{
+					Name: "ghcr.io/test/test",
+					Tag:  "v0.0.1",
+				},
 				Conditions: []v1.Condition{
 					{
 						Type:               "Ready",
