@@ -404,14 +404,38 @@ func ListTektonResources(ctx context.Context, client dynamic.DynamicClient, name
 
 func (r *PipelineTriggerReconciler) existsPipelineResource(ctx context.Context, pipelineTrigger pipelinev1alpha1.PipelineTrigger, client dynamic.DynamicClient, group string, version string) error {
 	// check if the referenced tekton pipeline exists
-	var pipelineRunResource = schema.GroupVersionResource{Group: group, Version: version, Resource: "pipelines"}
-	pipelineRef := pipelineTrigger.Spec.PipelineRun.Object["spec"].(map[string]interface{})["pipelineRef"].(map[string]interface{})["name"].(string)
-	_, err := client.Resource(pipelineRunResource).Namespace(pipelineTrigger.Namespace).Get(ctx, pipelineRef, metav1.GetOptions{})
-	if err != nil {
-		return err
-	} else {
+	spec, ok := pipelineTrigger.Spec.PipelineRun.Object["spec"].(map[string]interface{})
+	if !ok {
+		// If spec is not present, skip validation
 		return nil
 	}
+
+	pipelineRefObj, ok := spec["pipelineRef"].(map[string]interface{})
+	if !ok {
+		// If pipelineRef is not present, skip validation
+		return nil
+	}
+
+	// Check if using resolver-based reference (e.g., bundles, git, cluster)
+	if _, hasResolver := pipelineRefObj["resolver"]; hasResolver {
+		// Resolver-based references are validated by Tekton, skip our validation
+		return nil
+	}
+
+	// Check for direct pipeline name reference
+	pipelineName, ok := pipelineRefObj["name"].(string)
+	if !ok || pipelineName == "" {
+		// If name is not present or not a string, skip validation
+		return nil
+	}
+
+	// Validate that the pipeline exists
+	var pipelineRunResource = schema.GroupVersionResource{Group: group, Version: version, Resource: "pipelines"}
+	_, err := client.Resource(pipelineRunResource).Namespace(pipelineTrigger.Namespace).Get(ctx, pipelineName, metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (r *PipelineTriggerReconciler) isNamespaceDefinedInPipelineRun(pipelineTrigger pipelinev1alpha1.PipelineTrigger) bool {
